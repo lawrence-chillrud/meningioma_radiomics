@@ -1,14 +1,15 @@
-from code.utils.lsdir import lsdir
 from pathlib import Path
 from typing import Literal, Optional
 
 import pandas as pd
 
+from .paths import LABELS_FILE, MRIS_DIR, SEGS_DIR
+
 
 def get_cohort(
-    labels_file: str,
-    mris_dir: str,
-    segs_dir: str,
+    labels_file: Path = LABELS_FILE,
+    mris_dir: Path = MRIS_DIR,
+    segs_dir: Path = SEGS_DIR,
     outcome_of_interest: Optional[
         Literal["MethylationSubgroup", "Chr22q", "Chr1p"]
     ] = None,
@@ -21,11 +22,11 @@ def get_cohort(
 
     Parameters
     ----------
-    labels_file : str
+    labels_file : Path
         The path to the labels file.
-    mris_dir : str
+    mris_dir : Path
         The path to the MRI directory.
-    segs_dir : str
+    segs_dir : Path
         The path to the segmentations directory.
     outcome_of_interest : str or None
         If None (default), drops subjects who have NaN across all outcomes. If 'MethylationSubgroup', 'Chr22q', or 'Chr1p', drops subjects with missing values in the given outcome.
@@ -41,7 +42,7 @@ def get_cohort(
     labels_subs = [str(int(s)) for s in labels_subs]
 
     # Find which subjects have MRI data available
-    mri_subjects = lsdir(mris_dir)
+    mri_subjects = [p.name for p in Path(mris_dir).iterdir() if p.is_dir()]
 
     # Find which subjects have segmentation masks available
     segmentations = [

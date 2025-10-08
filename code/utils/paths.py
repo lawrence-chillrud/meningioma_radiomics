@@ -16,10 +16,12 @@ MODELING_DIR = DATA_DIR / "2_modeling"
 PYRAD_DIR = FEATEX_DIR / "1_pyradiomics"
 COLLAGE_DIR = FEATEX_DIR / "2_collage"
 
-# --- USER DEFINED DIRS & FILES OF INTEREST ---
-MRIS_DIR = PREPROC_DIR / "7b_COMPLETED_PREPROCESSED"
-SEGS_DIR = PREPROC_DIR / "all_smooth_segs_02-08-25"
-LABELS_FILE = PREPROC_DIR / "labels" / "MeningiomaBiomarkerData.csv"
+# --- USER DEFINED DIRS, FILES, GLOBAL VARS OF INTEREST ---
+MRIS_DIR = PREPROC_DIR / "7_COMPLETED_PREPROCESSED"
+SEGS_DIR = PREPROC_DIR / "8_ALL_SMOOTH_SEGS_02-08-25"
+LABELS_FILE = PREPROC_DIR / "0_LABELS" / "MeningiomaBiomarkerData.csv"
+PULSES = ["T1_POST", "FLAIR", "DIFFUSION", "ADC"]
+ROIS = [1, 3, 4, 5, 6, 13, 15, 16, 156, 22]
 
 # --- ensure directories exist ---
 for p in [
