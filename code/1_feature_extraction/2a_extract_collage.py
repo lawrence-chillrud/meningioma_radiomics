@@ -11,16 +11,17 @@ from code.utils import *
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
+from multiprocessing import cpu_count
 from pathlib import Path
 
 import collageradiomics
-import numpy as np
-import SimpleITK as sitk
+from ants import image_read
 from tqdm import tqdm
 
 # --- USER DEFINED GLOBAL VARS ---
 TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 OUTPUT_DIR = COLLAGE_DIR / "a_raw_collage" / TIMESTAMP
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
 HARALICK_WINDOW_SIZES = [3, 5]
 BIN_SIZES = [32, 64]
@@ -39,12 +40,10 @@ def run_collage(subject, pulse, seg, win, bin):
 
     # Read in MRI
     mri_path = get_mris(subject, pulses=pulse)[pulse]
-    mri = sitk.GetArrayFromImage(sitk.ReadImage(mri_path))
-    mri = np.swapaxes(mri, 0, 2)
+    mri = image_read(str(mri_path), reorient="IAL").numpy()
 
     # Read in segmentation mask
     seg_mask = get_segs(subject, rois=seg)[seg]
-    seg_mask = np.swapaxes(seg_mask, 0, 2)
 
     # Extract collage features
     collage = collageradiomics.Collage(
@@ -84,7 +83,7 @@ def main():
     # Console output
     print("-" * 80)
     print(f"⏳ Running {Path(__file__).name}")
-    print(f"💾 Logs will be saved to: {LOGFILE}")
+    print(f"📜 Logs will be saved to: {LOGFILE}")
 
     # Setup logfile
     logging.basicConfig(
@@ -113,7 +112,7 @@ def main():
     errors = 0
 
     # Parallel loop
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
         futures = {executor.submit(run_collage, *args): args for args in jobs_list}
 
         for future in tqdm(
