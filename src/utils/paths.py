@@ -22,6 +22,7 @@ SEGS_DIR = PREPROC_DIR / "8_ALL_SMOOTH_SEGS_02-08-25"
 LABELS_FILE = PREPROC_DIR / "0_LABELS" / "MeningiomaBiomarkerData.csv"
 PULSES = ["T1_POST", "FLAIR", "DIFFUSION", "ADC"]
 ROIS = [1, 3, 4, 5, 6, 13, 15, 16, 156, 22]
+PYRAD_FILE = PYRAD_DIR / "10-10-2025_15-40-01" / "features_wide.csv"
 
 # --- ensure directories exist ---
 for p in [

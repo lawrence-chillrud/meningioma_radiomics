@@ -7,7 +7,6 @@ CoLlAGe docs: https://collageradiomics.readthedocs.io/en/latest/
 """
 
 import logging
-from code.utils import *
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from itertools import product
@@ -18,14 +17,17 @@ import collageradiomics
 from ants import image_read
 from tqdm import tqdm
 
+from src.utils import *
+
 # --- USER DEFINED GLOBAL VARS ---
-TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+TIMESTAMP = "10-08-2025_22-57-53"  # datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 OUTPUT_DIR = COLLAGE_DIR / "a_raw_collage" / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
 HARALICK_WINDOW_SIZES = [3, 5]
 BIN_SIZES = [32, 64]
 SVD_RADIUS = 5
+MAX_WORKERS = 1  # cpu_count()
 
 
 def run_collage(subject, pulse, seg, win, bin):
@@ -70,13 +72,29 @@ def construct_jobs():
     jobs = []
     for s in tqdm(
         subjects,
-        desc="Step 1/2: Enumerating all CoLlAGe jobs needed",
+        desc="Step 1/3: Enumerating all possible CoLlAGe jobs",
         total=len(subjects),
+        ncols=120,
     ):
         mris = list(get_mris(s).keys())
         segs = list(get_segs(s).keys())
         jobs.extend(list(product([s], mris, segs, HARALICK_WINDOW_SIZES, BIN_SIZES)))
-    return jobs
+
+    jobs_left = []
+    for j in tqdm(
+        jobs,
+        desc="Step 2/3: Checking which jobs still need doing",
+        total=len(jobs),
+        ncols=120,
+    ):
+        output_filepath = (
+            OUTPUT_DIR
+            / f"subject-{j[0]}_pulse-{j[1]}_seg-{j[2]}_win-{j[3]}_bin-{j[4]}.joblib"
+        )
+        if not output_filepath.exists():
+            jobs_left.append(j)
+
+    return jobs_left
 
 
 def main():
@@ -107,16 +125,20 @@ def main():
     logging.info(f"CoLlAGe SVD radius (fixed): {SVD_RADIUS}")
     logging.info(f"Number of jobs to run: {N}")
     logging.info(f"Results saved to output directory: {OUTPUT_DIR}")
+    logging.info(f"MAX_WORKERS: {MAX_WORKERS}")
     logging.info(f"-" * 20)
     successes = 0
     errors = 0
 
     # Parallel loop
-    with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(run_collage, *args): args for args in jobs_list}
 
         for future in tqdm(
-            as_completed(futures), total=N, desc="Step 2/2: Completed CoLlAGe job"
+            as_completed(futures),
+            total=N,
+            desc="Step 3/3: Completed CoLlAGe job",
+            ncols=120,
         ):
             args = futures[future]
             try:
