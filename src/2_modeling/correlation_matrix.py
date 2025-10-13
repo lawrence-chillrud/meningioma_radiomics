@@ -1,3 +1,4 @@
+# %%
 import os
 import sys
 
@@ -36,7 +37,7 @@ seg_categories = list(
 
 # Choose grouping and colour accordingly
 unique_groups = feat_categories
-palette = sns.color_palette("tab10", len(unique_groups))
+palette = sns.color_palette("colorblind", len(unique_groups))
 group_colors = {grp: palette[i] for i, grp in enumerate(unique_groups)}
 group_map = {}
 for c in df_for_corr.columns:
@@ -44,6 +45,12 @@ for c in df_for_corr.columns:
         if g in c:
             group_map[c] = g
 col_colors = pd.Series(group_map).map(group_colors)
+
+ordered_cols = []
+for g in unique_groups:
+    grouped_cols = [c for c in df_for_corr.columns if g in c]
+    ordered_cols.extend(grouped_cols)
+df_for_corr = df_for_corr[ordered_cols]
 
 # Calculate correlation matrix
 corr = df_for_corr.corr()
@@ -55,7 +62,8 @@ sns.clustermap(
     col_cluster=False,
     row_colors=col_colors,
     col_colors=col_colors,
-    cmap="coolwarm",
+    cmap="viridis",
+    cbar_pos=None,
     center=0,
     xticklabels=False,
     yticklabels=False,
@@ -63,3 +71,5 @@ sns.clustermap(
 )
 
 plt.show()
+
+# %%

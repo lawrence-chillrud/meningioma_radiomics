@@ -29,8 +29,6 @@ for p in [
     PREPROC_DIR,
     FEATEX_DIR,
     MODELING_DIR,
-    MRIS_DIR,
-    SEGS_DIR,
     PYRAD_DIR,
     COLLAGE_DIR,
 ]:

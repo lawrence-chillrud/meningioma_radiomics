@@ -20,14 +20,14 @@ from tqdm import tqdm
 from src.utils import *
 
 # --- USER DEFINED GLOBAL VARS ---
-TIMESTAMP = "10-08-2025_22-57-53"  # datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+TIMESTAMP = "10-10-2025_19-17-50"  # datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 OUTPUT_DIR = COLLAGE_DIR / "a_raw_collage" / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
-HARALICK_WINDOW_SIZES = [3, 5]
-BIN_SIZES = [32, 64]
+HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
+BIN_SIZES = [16, 32, 48, 64]
 SVD_RADIUS = 5
-MAX_WORKERS = 1  # cpu_count()
+MAX_WORKERS = 4  # cpu_count()
 
 
 def run_collage(subject, pulse, seg, win, bin):
