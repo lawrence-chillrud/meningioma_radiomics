@@ -5,7 +5,11 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from matplotlib import cm
+from matplotlib.colors import Normalize
 import pandas as pd
+import numpy as np
 import seaborn as sns
 
 from src.utils import PYRAD_FILE
@@ -69,6 +73,55 @@ sns.clustermap(
     yticklabels=False,
     figsize=(10, 10),
 )
+
+plt.show()
+
+corr_for_hist = corr.copy().to_numpy()
+corr_for_hist[np.diag_indices(corr.shape[0])] = np.nan
+data = corr_for_hist.flatten()
+
+# Plot histogram of corr mat
+sns.histplot(
+    data,
+    bins=20
+)
+
+# Set x-axis ticks every 0.2
+plt.gca().xaxis.set_major_locator(ticker.MultipleLocator(0.2))
+
+# Set axis labels
+plt.xlabel("Correlation")
+plt.ylabel("Count")
+
+# Add commas to y-axis ticks
+plt.gca().yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x):,}"))
+
+plt.show()
+
+# %%
+plt.figure(figsize=(10, 10))
+plt.rcParams.update({'font.size': 18})
+
+# Create histogram and capture bar containers and bin edges
+counts, bins, patches = plt.hist(data, bins=20)
+
+# Normalize bin centers to range [-1, 1] for mapping to colormap
+norm = Normalize(vmin=-1, vmax=1)
+cmap = cm.get_cmap('viridis')
+
+# Apply colors to each bar based on bin center
+for bin_center, patch in zip((bins[:-1] + bins[1:]) / 2, patches):
+    patch.set_facecolor(cmap(norm(bin_center)))
+
+# Set x-axis ticks every 0.2
+plt.gca().xaxis.set_major_locator(ticker.MultipleLocator(0.2))
+
+# Set axis labels
+plt.xlabel("Correlation")
+plt.ylabel("Count")
+
+# Format y-axis with commas
+plt.gca().yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{int(x):,}"))
 
 plt.show()
 
