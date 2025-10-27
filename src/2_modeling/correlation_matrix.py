@@ -6,11 +6,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from matplotlib import cm
 from matplotlib.colors import Normalize
-import pandas as pd
-import numpy as np
-import seaborn as sns
 
 from src.utils import PYRAD_FILE
 
@@ -81,10 +81,7 @@ corr_for_hist[np.diag_indices(corr.shape[0])] = np.nan
 data = corr_for_hist.flatten()
 
 # Plot histogram of corr mat
-sns.histplot(
-    data,
-    bins=20
-)
+sns.histplot(data, bins=20)
 
 # Set x-axis ticks every 0.2
 plt.gca().xaxis.set_major_locator(ticker.MultipleLocator(0.2))
@@ -100,14 +97,14 @@ plt.show()
 
 # %%
 plt.figure(figsize=(10, 10))
-plt.rcParams.update({'font.size': 18})
+plt.rcParams.update({"font.size": 18})
 
 # Create histogram and capture bar containers and bin edges
 counts, bins, patches = plt.hist(data, bins=20)
 
 # Normalize bin centers to range [-1, 1] for mapping to colormap
 norm = Normalize(vmin=-1, vmax=1)
-cmap = cm.get_cmap('viridis')
+cmap = cm.get_cmap("viridis")
 
 # Apply colors to each bar based on bin center
 for bin_center, patch in zip((bins[:-1] + bins[1:]) / 2, patches):
