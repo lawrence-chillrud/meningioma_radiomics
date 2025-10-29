@@ -42,14 +42,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 from tqdm import tqdm
 
-from src.utils import PYRAD_FILE, get_feats
+from src.utils import PYRAD_FILE, MODELING_DIR, get_feats
 from src.utils.plotting import *
 
 MAX_WORKERS = 16
 FEATURES_PATH = PYRAD_FILE
-PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LAMBDAS = np.arange(0.05, 0.31, 0.01).round(2)
+LAMBDAS = np.arange(0.06, 0.61, 0.02).round(2)
 LR_PARAMS = {
     "penalty": "l1",
     "class_weight": "balanced",
@@ -219,6 +219,7 @@ else:
     plot_binary_results(outer_df["y_probs"], outer_df["y_true"], CLASS_IDS)
 
 # %%
+test_coefs = test_coefs.squeeze()
 if len(test_coefs.shape) == 3:
     for c in range(test_coefs.shape[1]):
         current_model = test_coefs[:, c, :]
@@ -254,8 +255,16 @@ if len(test_coefs.shape) == 3:
         # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
         # Frequency stability
         (current_coefs_df.filter(like="Test fold") != 0).T.mean()
+
+        current_coefs_df["Feature"] = current_coefs_df.index
+        current_coefs_df["Prediction task"] = CLASS_IDS[c]
+        output_dir = MODELING_DIR / "pyradiomics"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        current_coefs_df.to_csv(
+            MODELING_DIR / "pyradiomics" / f"{CLASS_IDS[c]}_coefs.csv", index=False
+        )
+
 else:
-    test_coefs = test_coefs.squeeze()
     nonzero_feats_idxs = np.nonzero(np.sum(test_coefs, axis=0))[0]
     current_coefs = test_coefs[:, nonzero_feats_idxs]
     current_coefs_df = pd.DataFrame(
@@ -286,5 +295,13 @@ else:
     # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
     # Frequency stability
     (current_coefs_df.filter(like="Test fold") != 0).T.mean()
+
+    current_coefs_df["Feature"] = current_coefs_df.index
+    current_coefs_df["Prediction task"] = PREDICTION_TASK
+    output_dir = MODELING_DIR / "pyradiomics"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    current_coefs_df.to_csv(
+        MODELING_DIR / "pyradiomics" / f"{PREDICTION_TASK}_coefs.csv", index=False
+    )
 
 # %%
