@@ -6,12 +6,6 @@ repos:
         language_version: python3.9
         args: [--line-length=88]
 
-  - repo: https://github.com/pycqa/isort
-    rev: 6.1.0
-    hooks:
-      - id: isort
-        name: isort (python)
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

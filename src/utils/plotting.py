@@ -4,10 +4,19 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from sklearn.metrics import (RocCurveDisplay, accuracy_score, auc,
-                             balanced_accuracy_score, confusion_matrix,
-                             f1_score, jaccard_score, matthews_corrcoef,
-                             precision_score, recall_score, roc_curve)
+from sklearn.metrics import (
+    RocCurveDisplay,
+    accuracy_score,
+    auc,
+    balanced_accuracy_score,
+    confusion_matrix,
+    f1_score,
+    jaccard_score,
+    matthews_corrcoef,
+    precision_score,
+    recall_score,
+    roc_curve,
+)
 from sklearn.preprocessing import label_binarize
 
 from .get_segs import get_segs_roi_key
