@@ -66,12 +66,14 @@ sns.clustermap(
     col_cluster=False,
     row_colors=col_colors,
     col_colors=col_colors,
-    cmap="viridis",
+    cmap="vlag",
     cbar_pos=None,
     center=0,
     xticklabels=False,
     yticklabels=False,
     figsize=(10, 10),
+    vmin=-1,
+    vmax=1,
 )
 
 plt.show()
@@ -104,7 +106,7 @@ counts, bins, patches = plt.hist(data, bins=20)
 
 # Normalize bin centers to range [-1, 1] for mapping to colormap
 norm = Normalize(vmin=-1, vmax=1)
-cmap = cm.get_cmap("viridis")
+cmap = cm.get_cmap("vlag")
 
 # Apply colors to each bar based on bin center
 for bin_center, patch in zip((bins[:-1] + bins[1:]) / 2, patches):
