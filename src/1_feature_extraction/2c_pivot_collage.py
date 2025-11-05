@@ -9,22 +9,27 @@ import pandas as pd
 from src.utils import COLLAGE_DIR
 
 # %%
-df = pd.read_csv(
-    COLLAGE_DIR
-    / "b_aggregated_collage"
-    / "10-10-2025_19-17-50"
-    / "features-collage_win-5_bin-64.csv"
-)
+collage_files = [f for f in COLLAGE_DIR.rglob("*.csv")]
+
+for f in collage_files:
+
+    df = pd.read_csv(f).rename(columns={"subject": "Subject Number"})
+
+    win_size = df["win"][0]
+    bin_size = df["bin"][0]
+
+    wide_df = df.set_index(
+        ["Subject Number", "win", "bin", "pulse", "seg", "collage_feat", "collage_angle"]
+    ).unstack(["pulse", "seg", "collage_feat", "collage_angle"])
+
+    wide_df.columns = [
+        f"{pulse}_{seg}_{feat}_{angle}_{col}"
+        for col, pulse, seg, feat, angle in wide_df.columns.to_flat_index()
+    ]
+
+    wide_df = wide_df.reset_index().drop(columns=["win", "bin"])
+
+    new_filepath = f.parent / ("wide-" + f.name)
+    wide_df.to_csv(new_filepath, index=False)
+    
 # %%
-wide_df = df.set_index(
-    ["subject", "win", "bin", "pulse", "seg", "collage_feat", "collage_angle"]
-).unstack(["pulse", "seg", "collage_feat", "collage_angle"])
-
-wide_df.columns = [
-    f"{pulse}_{seg}_{feat}_{angle}_{col}"
-    for col, pulse, seg, feat, angle in wide_df.columns.to_flat_index()
-]
-
-wide_df = wide_df.reset_index()
-
-wide_df

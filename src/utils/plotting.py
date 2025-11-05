@@ -39,12 +39,19 @@ mpl.rcParams.update(
 def translate_feat_names(names):
     new_names = []
     for n in names:
-        pulse, annotation, feat = n.split("-")  # e.g. T1, 1, firstorder_Kurtosis
-        feat_type, feat_name = feat.split("_")  # e.g. firstorder, Kurtosis
-        readable_annotation = get_segs_roi_key()[
-            int(annotation)
-        ]  # e.g. Enhancing tumor
-        new_names.append(f"{readable_annotation}'s {feat_name} on {pulse}")
+        if len(n.split("_")) == 5:
+            pulse, annotation, haralick, angle, feat = n.split("_")
+            readable_annotation = get_segs_roi_key()[
+                int(annotation)
+            ]  # e.g. Enhancing tumor
+            new_names.append(f"{readable_annotation}'s {haralick} {feat} (ang {angle}) on {pulse}")
+        else:
+            pulse, annotation, feat = n.split("-")  # e.g. T1, 1, firstorder_Kurtosis
+            feat_type, feat_name = feat.split("_")  # e.g. firstorder, Kurtosis
+            readable_annotation = get_segs_roi_key()[
+                int(annotation)
+            ]  # e.g. Enhancing tumor
+            new_names.append(f"{readable_annotation}'s {feat_name} on {pulse}")
 
     return new_names
 
@@ -291,11 +298,7 @@ def plot_corr_matrix(
         vmax=1,
     )
     if custom_labels:
-        cg.ax_heatmap.set_xticklabels(
-            translate_feat_names(data.index), rotation=45, ha="right"
-        )
-        cg.ax_heatmap.set_yticklabels(
-            translate_feat_names(data.index), rotation=-45, ha="left"
-        )
+        cg.ax_heatmap.set_xticks(ticks=np.arange(len(data)), labels=translate_feat_names(data.index), rotation=45, ha="right")
+        cg.ax_heatmap.set_xticks(ticks=np.arange(len(data)), labels=translate_feat_names(data.index), rotation=-45, ha="left")
     plt.show()
     plt.close()
