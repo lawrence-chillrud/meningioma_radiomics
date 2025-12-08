@@ -3,6 +3,7 @@ from typing import List, Union
 
 import numpy as np
 from ants import image_read
+import SimpleITK as sitk
 
 from .paths import ROIS, SEGS_DIR
 
@@ -29,6 +30,7 @@ def get_segs(
     subject: Union[str, int],
     segs_dir: Path = SEGS_DIR,
     rois: Union[int, List[int]] = ROIS,
+    with_sitk: bool = False,
 ):
     """
     Given a subject ID number, returns volumetric segmentation masks for the specified region(s) of interest (rois).
@@ -38,12 +40,14 @@ def get_segs(
     subject (str or int): The subject ID number.
     segs_dir (Path): The directory containing the segmentation masks.
     rois (List[int]): The regions of interest (rois) to extract from the available segmentation mask(s).
+    with_sitk (bool): Whether to read & return segmentations with antsPy (False) or sitk (True). Useful if needing
+    segmentations for pyradiomics feature extraction, which expects the segs as sitk objects.
 
     Returns:
     --------
     (dict or None): A dictionary containing the volumetric segmentation masks for the available specified region(s) of interest (roi),
     or None if the subject has no segmentations available. Returned masks are always binary, with 1s indicating the
-    presence of the roi and 0s elsewhere.
+    presence of the roi and 0s elsewhere. Masks are binary ndarrays if with_sitk=False, otherwise sitk Image objects.
 
     ROI Key:
     --------
@@ -73,7 +77,14 @@ def get_segs(
     all_seg_arrays = []
     all_seg_labels = []
     for f in all_seg_paths:
-        seg_arr = image_read(str(f), reorient="IAL").numpy()
+        if with_sitk:
+            seg_sitk = sitk.ReadImage(str(f))
+            seg_arr = sitk.GetArrayFromImage(seg_sitk)
+            # Coded as below, this logic means we are assuming all seg files of the subject have identical origin, spacing, direction (o,s,d).
+            # If this is not a valid assumption, need to keep track of the o,s,d for each seg read, assess if same, and throw error if not.
+            origin, spacing, direction = seg_sitk.GetOrigin(), seg_sitk.GetSpacing(), seg_sitk.GetDirection()
+        else:
+            seg_arr = image_read(str(f), reorient="IAL").numpy()
         all_seg_arrays.append(seg_arr)
         all_seg_labels.extend([int(v) for v in np.unique(seg_arr) if v != 0])
 
@@ -141,6 +152,13 @@ def get_segs(
             roi_idx = all_seg_labels.index(roi)
             mask_oi = masks[roi_idx]
             mask_oi = mask_oi > 0
-            final_masks[roi] = mask_oi.astype(int)
+            if with_sitk:
+                mask_oi_sitk = sitk.GetImageFromArray(mask_oi.astype(int))
+                mask_oi_sitk.SetOrigin(origin)
+                mask_oi_sitk.SetSpacing(spacing)
+                mask_oi_sitk.SetDirection(direction)
+                final_masks[roi] = mask_oi_sitk
+            else:
+                final_masks[roi] = mask_oi.astype(int)
 
     return final_masks
