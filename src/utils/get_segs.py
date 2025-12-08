@@ -15,13 +15,13 @@ def get_segs_roi_key():
         3: "Necrotic tumor",
         4: "Edema",
         5: "Susceptibility",
-        6: "Resitricted diffusion",
+        6: "Restricted diffusion",
         7: "Normal-appearing white matter (NAWM)",
-        13: "Enhancing tumor + Necrotic tumor",
-        15: "Enhancing tumor + Susceptibility",
-        16: "Enhancing tumor + Resitricted diffusion",
-        156: "Enhancing tumor + Susceptibility + Resitricted diffusion",
-        22: "Whole tumor mask",
+        13: "Enhancing & necrotic tumor",
+        15: "Enhancing tumor & susceptibility",
+        16: "Enhancing tumor & Restricted diffusion",
+        156: "Enhancing tumor & Susceptibility & Restricted diffusion",
+        22: "Whole tumor",
     }
 
 

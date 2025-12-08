@@ -49,7 +49,7 @@ MAX_WORKERS = 16
 FEATURES_PATH = PYRAD_FILE
 PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LAMBDAS = np.arange(0.06, 0.61, 0.02).round(2)
+LAMBDAS = np.linspace(0.06, 0.7, 30).round(2)
 LR_PARAMS = {
     "penalty": "l1",
     "class_weight": "balanced",
@@ -277,7 +277,8 @@ else:
         current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
     )
     current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-    most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
+    # most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
+    most_robust_feats_df = current_coefs_df.iloc[:5]
 
     # Heatmap
     plot_heatmap(most_robust_feats_df.filter(like="Test fold"))

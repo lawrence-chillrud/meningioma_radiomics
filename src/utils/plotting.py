@@ -259,25 +259,26 @@ def plot_coef_boxplot(data):
         rotation=0,
         ha="right",
     )
-    plt.xlabel("Feature coefficient\n(across all NLTOCV testing folds)")
+    # plt.xlabel("Feature coefficient\n(across all NLTOCV testing folds)")
+    plt.xlabel("Coefficient")
     plt.show()
     plt.close()
 
 
 def plot_var_exp(data):
     plt.figure()
-    sns.barplot(data)
-    plt.xticks(
+    sns.barplot(data*100, orient='h')
+    plt.yticks(
         ticks=np.arange(len(data)),
         labels=translate_feat_names(data.index),
-        rotation=45,
+        rotation=0,
         ha="right",
         rotation_mode="anchor",
     )
-    plt.ylabel("Proportion of variance explained")
-    plt.title(
-        f"Features needed to cumulatively explain ≤ 0.95 of\nvariance in model coefficients (n={len(data)})"
-    )
+    plt.xlabel("% variance in model coefficients explained")
+    # plt.title(
+    #     f"Top {len(data)} features explain {round(sum(data) * 100, 2)}% of\nthe variance in model coefficients"
+    # )
     plt.show()
     plt.close()
 
@@ -298,7 +299,7 @@ def plot_corr_matrix(
         vmax=1,
     )
     if custom_labels:
-        cg.ax_heatmap.set_xticks(ticks=np.arange(len(data)), labels=translate_feat_names(data.index), rotation=45, ha="right")
-        cg.ax_heatmap.set_xticks(ticks=np.arange(len(data)), labels=translate_feat_names(data.index), rotation=-45, ha="left")
+        cg.ax_heatmap.set_yticks(ticks=np.arange(len(data)) + 0.5, labels=translate_feat_names(data.index))
+        cg.ax_heatmap.set_xticks(ticks=np.arange(len(data)) + 0.5, labels=translate_feat_names(data.index), rotation=-45, ha="left")
     plt.show()
     plt.close()
