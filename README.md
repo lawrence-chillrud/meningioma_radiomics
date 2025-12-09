@@ -26,9 +26,9 @@ The data used in this project are not publicly available to comply with IRB prot
 
 ## Workflow
 
-The [`code/utils/paths.py`](code/utils/paths.py) file sets all the necessary filepaths that all Python scripts will refer to. Python scripts carry out the following sequential workflow (see the below linked READMEs for further details on each step):
+The [`src/utils/paths.py`](src/utils/paths.py) file sets all the necessary filepaths that all Python scripts will refer to. Python scripts carry out the following sequential workflow (see the below linked READMEs for further details on each step):
 
-0. [Preprocessing](code/0_preprocessing/README.md):
+0. [Preprocessing](src/0_preprocessing/README.md):
     - File clean up
     - Scan type clean up
     - DICOM to NIfTI conversion
@@ -36,10 +36,10 @@ The [`code/utils/paths.py`](code/utils/paths.py) file sets all the necessary fil
     - Skull stripping
     - Intensity normalization
     - Image registration
-1. [Radiomics feature extraction](code/1_feature_extraction/README.md):
+1. [Radiomics feature extraction](src/1_feature_extraction/README.md):
     - PyRadiomics
     - CoLlAGe
-2. [Modeling](code/2_modeling/README.md):
+2. [Modeling](src/2_modeling/README.md):
     - LASSO logistic regression
     - Nested leave-two-out cross-validation
 

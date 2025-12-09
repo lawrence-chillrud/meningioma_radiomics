@@ -24,7 +24,12 @@ TIMESTAMP = "10-10-2025_19-17-50"  # datetime.now().strftime("%m-%d-%Y_%H-%M-%S"
 OUTPUT_DIR = COLLAGE_DIR / "a_raw_collage" / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
-HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
+HARALICK_WINDOW_SIZES = [
+    3,
+    5,
+    7,
+    9,
+]  # aka neighborhood size (N) for computing localized orientations
 BIN_SIZES = [16, 32, 48, 64]
 SVD_RADIUS = 5
 MAX_WORKERS = 4  # cpu_count()
