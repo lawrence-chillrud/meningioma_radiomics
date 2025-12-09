@@ -9,6 +9,7 @@ from tqdm import tqdm
 A_DIR = PYRAD_DIR / "a_raw_pyradiomics"
 RAW_PYRAD_DIR = sorted([d for d in A_DIR.iterdir() if d.is_dir()])[-1]
 OUTPUT_DIR = PYRAD_DIR / "b_aggregated_pyradiomics"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_FP = OUTPUT_DIR / f"{RAW_PYRAD_DIR.name}_features.csv"
 FEAT_FILES = sorted([f for f in RAW_PYRAD_DIR.iterdir() if f.name.endswith(".joblib")])
 
