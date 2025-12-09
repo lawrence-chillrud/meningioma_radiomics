@@ -49,7 +49,9 @@ MAX_WORKERS = 16
 FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
 HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
 BIN_SIZES = [16, 32, 48, 64]
-PREDICTION_TASK = "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = (
+    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LAMBDAS = np.linspace(0.05, 0.35, 10).round(2)
 LR_PARAMS = {
@@ -62,13 +64,20 @@ LR_PARAMS = {
 }
 
 Xs, ys, SUBJECTS = {}, {}, {}
-for f in tqdm(FEATURES_PATHS, total=len(FEATURES_PATHS), desc="Reading in all collage files...", ncols=120):
-    fname = " ".join(f.name.replace('.csv', '').split('_')[1:])  # e.g. 'win-7 bin-48'
+for f in tqdm(
+    FEATURES_PATHS,
+    total=len(FEATURES_PATHS),
+    desc="Reading in all collage files...",
+    ncols=120,
+):
+    fname = " ".join(f.name.replace(".csv", "").split("_")[1:])  # e.g. 'win-7 bin-48'
     Xs[fname], ys[fname], SUBJECTS[fname] = get_feats(
         prediction_task=PREDICTION_TASK, features_path=f, scaler=SCALER
     )
 
-N = len(Xs["win-7 bin-48"])  # doesn't actually matter which one, across all Xs, N is the same
+N = len(
+    Xs["win-7 bin-48"]
+)  # doesn't actually matter which one, across all Xs, N is the same
 N_CLASSES = len(set(ys["win-7 bin-48"]))
 CLASS_IDS = ["Intact", "Lost"]
 if N_CLASSES == 3:
@@ -109,7 +118,9 @@ def val_job(test_idx, val_idx, lambda_i, win_size, bin_size):
 
 val_loop = [
     (n, m, lambda_i, win_size, bin_size)
-    for n, m, lambda_i, win_size, bin_size in product(range(N), range(N), LAMBDAS, HARALICK_WINDOW_SIZES, BIN_SIZES)
+    for n, m, lambda_i, win_size, bin_size in product(
+        range(N), range(N), LAMBDAS, HARALICK_WINDOW_SIZES, BIN_SIZES
+    )
     if n != m
 ]
 
@@ -129,7 +140,9 @@ df = pd.read_csv(f"{PREDICTION_TASK}_collage_gridsearch.csv")
 
 # %%
 val_summary = (
-    df.groupby(["test_idx", "lambda_i", "win_size", "bin_size"])[["train_loss", "val_loss"]]
+    df.groupby(["test_idx", "lambda_i", "win_size", "bin_size"])[
+        ["train_loss", "val_loss"]
+    ]
     .mean()
     .reset_index()
 )
@@ -137,31 +150,40 @@ val_summary = val_summary.rename(
     columns={"train_loss": "Training", "val_loss": "Validation"}
 )
 val_summary_long = val_summary.melt(
-    id_vars=["test_idx", "lambda_i", "win_size", "bin_size"], var_name="Dataset split", value_name="loss"
+    id_vars=["test_idx", "lambda_i", "win_size", "bin_size"],
+    var_name="Dataset split",
+    value_name="loss",
 )
 
 if val_summary["test_idx"].nunique() > 1:
-    best_hyperparams = val_summary_long[val_summary_long["Dataset split"] == "Validation"] \
-        .loc[
-            lambda df: df.groupby(["test_idx"])["loss"].idxmin()
-        ].reset_index(drop=True)
+    best_hyperparams = (
+        val_summary_long[val_summary_long["Dataset split"] == "Validation"]
+        .loc[lambda df: df.groupby(["test_idx"])["loss"].idxmin()]
+        .reset_index(drop=True)
+    )
 else:
-    collage_stats = val_summary_long[val_summary_long["Dataset split"] == "Validation"] \
-        .drop(columns=["test_idx", "Dataset split"]) \
-        .loc[
-            lambda df: df.groupby(["win_size", "bin_size"])["loss"].idxmin()
-        ]
-    np.array(collage_stats["bin_size"]).reshape(4,4)
-    np.array(collage_stats["win_size"]).reshape(4,4)
-    np.array(collage_stats["loss"]).reshape(4,4)
+    collage_stats = (
+        val_summary_long[val_summary_long["Dataset split"] == "Validation"]
+        .drop(columns=["test_idx", "Dataset split"])
+        .loc[lambda df: df.groupby(["win_size", "bin_size"])["loss"].idxmin()]
+    )
+    np.array(collage_stats["bin_size"]).reshape(4, 4)
+    np.array(collage_stats["win_size"]).reshape(4, 4)
+    np.array(collage_stats["loss"]).reshape(4, 4)
     plt.figure()
-    sns.heatmap(np.array(collage_stats["loss"]).reshape(4,4), xticklabels=np.unique(collage_stats["bin_size"]), yticklabels=np.unique(collage_stats["win_size"]), annot=np.array(collage_stats["lambda_i"]).reshape(4,4))
+    sns.heatmap(
+        np.array(collage_stats["loss"]).reshape(4, 4),
+        xticklabels=np.unique(collage_stats["bin_size"]),
+        yticklabels=np.unique(collage_stats["win_size"]),
+        annot=np.array(collage_stats["lambda_i"]).reshape(4, 4),
+    )
     plt.xlabel("Bin size")
     plt.ylabel("Window size")
     plt.show()
     plt.close()
 
 # sns.relplot(val_summary_long, kind="line", x="lambda_i", y="loss", style="Dataset split", col="win_size", row="bin_size")
+
 
 # %%
 def test_job(test_idx):
@@ -245,7 +267,9 @@ if len(test_coefs.shape) == 3:
         plot_var_exp(most_robust_feats_df["Prop Var Exp"])
 
         # Correlation matrix of top features
-        feat_corr = Xs["win-9 bin-64"][most_robust_feats_df["Prop Var Exp"].index].corr()
+        feat_corr = Xs["win-9 bin-64"][
+            most_robust_feats_df["Prop Var Exp"].index
+        ].corr()
         plot_corr_matrix(feat_corr)
 
         # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
@@ -302,7 +326,10 @@ else:
 
 # %%
 from src.utils import MRIS_DIR
-incorrect_subjects = SUBJECTS[f"win-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][0]} bin-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][1]}"][outer_df[outer_df["y_true"] != outer_df["y_pred"]].test_idx.to_list()]
+
+incorrect_subjects = SUBJECTS[
+    f"win-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][0]} bin-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][1]}"
+][outer_df[outer_df["y_true"] != outer_df["y_pred"]].test_idx.to_list()]
 mri_filepaths = MRIS_DIR.rglob("*Presurgical*")
 
 sessions = {}

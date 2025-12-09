@@ -5,12 +5,12 @@ Extracts PyRadiomics features on our meningioma cohort (w/parallelization).
 
 PyRadiomics docs: https://pyradiomics.readthedocs.io/en/latest/
 """
+
 import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from multiprocessing import cpu_count
 from pathlib import Path
-# from ants import image_read
 from itertools import product
 from tqdm import tqdm
 import radiomics
@@ -19,29 +19,18 @@ from src.utils import *
 import joblib
 
 # --- USER DEFINED GLOBAL VARS ---
-TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-OUTPUT_DIR = PYRAD_DIR / "a_raw_pyradiomics" / TIMESTAMP
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-LOGFILE = OUTPUT_DIR / "logfile.txt"
-MAX_WORKERS = cpu_count()
-radiomics.setVerbosity(level=60) # logging.INFO or level=60
 EXTRACTOR = featureextractor.RadiomicsFeatureExtractor(correctMask=True)
-EXTRACTOR.enableAllFeatures()
 
 
-def run_pyrad(subject, pulse, seg):
+def run_pyrad(subject, pulse, seg, output_dir):
     """
     Extracts PyRadiomics features on provided subject, pulse, seg combination.
     Saves to disk.
     """
-    output_filepath = (
-        OUTPUT_DIR
-        / f"subject-{subject}_pulse-{pulse}_seg-{seg}.joblib"
-    )
+    output_filepath = output_dir / f"subject-{subject}_pulse-{pulse}_seg-{seg}.joblib"
 
     # Read in MRI
     mri_path = get_mris(subject, pulses=pulse)[pulse]
-    # mri = image_read(str(mri_path), reorient="IAL").numpy()
 
     # Read in segmentation mask
     seg_mask = get_segs(subject, rois=seg, with_sitk=True)[seg]
@@ -52,7 +41,8 @@ def run_pyrad(subject, pulse, seg):
     # Save features to disk
     joblib.dump(result, output_filepath)
 
-def construct_jobs():
+
+def construct_jobs(output_dir):
     """
     Enumerate all available combinations of subjects, pulse seqs & segmentation labels
     to later submit to workers.
@@ -69,7 +59,7 @@ def construct_jobs():
     ):
         mris = list(get_mris(s).keys())
         segs = list(get_segs(s).keys())
-        jobs.extend(list(product([s], mris, segs)))
+        jobs.extend(list(product([s], mris, segs, [output_dir])))
 
     jobs_left = []
     for j in tqdm(
@@ -78,10 +68,7 @@ def construct_jobs():
         total=len(jobs),
         ncols=120,
     ):
-        output_filepath = (
-            OUTPUT_DIR
-            / f"subject-{j[0]}_pulse-{j[1]}_seg-{j[2]}.joblib"
-        )
+        output_filepath = output_dir / f"subject-{j[0]}_pulse-{j[1]}_seg-{j[2]}.joblib"
         if not output_filepath.exists():
             jobs_left.append(j)
 
@@ -89,6 +76,13 @@ def construct_jobs():
 
 
 def main():
+    # Main housekeeping
+    TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    OUTPUT_DIR = PYRAD_DIR / "a_raw_pyradiomics" / TIMESTAMP
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    LOGFILE = OUTPUT_DIR / "logfile.txt"
+    MAX_WORKERS = cpu_count()
+
     # Console output
     print("-" * 80)
     print(f"⏳ Running {Path(__file__).name}")
@@ -97,12 +91,23 @@ def main():
     # Setup logfile
     logging.basicConfig(
         filename=LOGFILE,
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
+    # PyRadiomics housekeeping
+    radiomics.logger.setLevel(logging.DEBUG)
+    EXTRACTOR.enableAllFeatures()
+    EXTRACTOR.enableFeatureClassByName("firstorder")
+    EXTRACTOR.enableFeatureClassByName("shape")
+    EXTRACTOR.enableFeatureClassByName("glcm")
+    EXTRACTOR.enableFeatureClassByName("glrlm")
+    EXTRACTOR.enableFeatureClassByName("glszm")
+    EXTRACTOR.enableFeatureClassByName("gldm")
+    EXTRACTOR.enableFeatureClassByName("ngtdm")
+
     # Construct list of all jobs needed to be run (list of args to pass to wor)
-    jobs_list = construct_jobs()
+    jobs_list = construct_jobs(output_dir=OUTPUT_DIR)
     N = len(jobs_list)
 
     # Start logfile

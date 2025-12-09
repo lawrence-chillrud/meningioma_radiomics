@@ -19,7 +19,15 @@ for f in collage_files:
     bin_size = df["bin"][0]
 
     wide_df = df.set_index(
-        ["Subject Number", "win", "bin", "pulse", "seg", "collage_feat", "collage_angle"]
+        [
+            "Subject Number",
+            "win",
+            "bin",
+            "pulse",
+            "seg",
+            "collage_feat",
+            "collage_angle",
+        ]
     ).unstack(["pulse", "seg", "collage_feat", "collage_angle"])
 
     wide_df.columns = [
@@ -31,5 +39,5 @@ for f in collage_files:
 
     new_filepath = f.parent / ("wide-" + f.name)
     wide_df.to_csv(new_filepath, index=False)
-    
+
 # %%

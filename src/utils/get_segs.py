@@ -82,7 +82,11 @@ def get_segs(
             seg_arr = sitk.GetArrayFromImage(seg_sitk)
             # Coded as below, this logic means we are assuming all seg files of the subject have identical origin, spacing, direction (o,s,d).
             # If this is not a valid assumption, need to keep track of the o,s,d for each seg read, assess if same, and throw error if not.
-            origin, spacing, direction = seg_sitk.GetOrigin(), seg_sitk.GetSpacing(), seg_sitk.GetDirection()
+            origin, spacing, direction = (
+                seg_sitk.GetOrigin(),
+                seg_sitk.GetSpacing(),
+                seg_sitk.GetDirection(),
+            )
         else:
             seg_arr = image_read(str(f), reorient="IAL").numpy()
         all_seg_arrays.append(seg_arr)
