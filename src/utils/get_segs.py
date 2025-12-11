@@ -11,18 +11,18 @@ from .paths import ROIS, SEGS_DIR
 def get_segs_roi_key():
     """Returns a dict mapping int keys to corresponding segmentation rois."""
     return {
-        1: "Enhancing tumor",
-        2: "Other tumor",
-        3: "Necrotic tumor",
-        4: "Edema",
-        5: "Susceptibility",
-        6: "Restricted diffusion",
-        7: "Normal-appearing white matter (NAWM)",
-        13: "Enhancing & necrotic tumor",
-        15: "Enhancing tumor & susceptibility",
-        16: "Enhancing tumor & Restricted diffusion",
-        156: "Enhancing tumor & Susceptibility & Restricted diffusion",
-        22: "Whole tumor",
+        1: "Enh",
+        2: "Oth",
+        3: "Ncr",
+        4: "Edm",
+        5: "Scp",
+        6: "RstDff",
+        7: "NAWM",
+        13: "Enh & Ncr",
+        15: "Enh & Scp",
+        16: "Enh & RstDff",
+        156: "Enh & Scp & RstDff",
+        22: "Tmr",
     }
 
 

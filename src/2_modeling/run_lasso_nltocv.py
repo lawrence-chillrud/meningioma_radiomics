@@ -34,6 +34,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from itertools import product
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from matplotlib.lines import Line2D
+from matplotlib.legend_handler import HandlerBase
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -46,10 +49,9 @@ from src.utils import PYRAD_FILE, MODELING_DIR, get_feats
 from src.utils.plotting import *
 
 MAX_WORKERS = 16
-FEATURES_PATH = PYRAD_FILE
 PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LAMBDAS = np.linspace(0.06, 0.7, 30).round(2)
+LAMBDAS = np.linspace(0.06, 0.8, 25)  # .round(2)
 LR_PARAMS = {
     "penalty": "l1",
     "class_weight": "balanced",
@@ -61,7 +63,10 @@ LR_PARAMS = {
 
 
 X, y, SUBJECTS = get_feats(
-    prediction_task=PREDICTION_TASK, features_path=FEATURES_PATH, scaler=SCALER
+    prediction_task=PREDICTION_TASK,
+    features_path=PYRAD_FILE,
+    scaler=SCALER,
+    low_var_thresh=None,
 )
 N = len(X)
 N_CLASSES = len(set(y))
@@ -123,52 +128,126 @@ val_summary = val_summary.rename(
 val_summary_long = val_summary.melt(
     id_vars=["test_idx", "lambda_i"], var_name="Dataset split", value_name="loss"
 )
-
-# Line plot summarizing lambda search
-ax = sns.lineplot(
-    data=val_summary_long,
-    x="lambda_i",
-    y="loss",
-    hue="test_idx",
-    style="Dataset split",
-    palette="flare",
-    legend=None,
+df_val_summary_agg = (
+    val_summary_long.groupby(["lambda_i", "Dataset split"])
+    .agg(
+        mean_loss=("loss", "mean"),
+        std_loss=("loss", "std"),
+        n=("loss", "count"),
+    )
+    .reset_index()
 )
-# scatter plot on top
-sns.scatterplot(
-    data=val_summary_long,
-    x="lambda_i",
-    y="loss",
-    hue="test_idx",
-    style="Dataset split",
-    palette="flare",
-    legend="brief",
-    ax=ax,
-)
+# 95% CI using std-dev
+df_val_summary_agg["ci_low"] = df_val_summary_agg[
+    "mean_loss"
+] - 1.96 * df_val_summary_agg["std_loss"] / np.sqrt(df_val_summary_agg["n"])
+df_val_summary_agg["ci_high"] = df_val_summary_agg[
+    "mean_loss"
+] + 1.96 * df_val_summary_agg["std_loss"] / np.sqrt(df_val_summary_agg["n"])
 
-# keep only style legend
-handles, labels = ax.get_legend_handles_labels()
-new_handles = []
-new_labels = []
-for h, l in zip(handles, labels):
-    if l in val_summary_long["Dataset split"].unique():
-        new_handles.append(h)
-        new_labels.append(l)
-ax.legend(new_handles, new_labels, title="Dataset split")
 
-# colorbar
-norm = plt.Normalize(
-    val_summary_long["test_idx"].min(), val_summary_long["test_idx"].max()
-)
-sm = plt.cm.ScalarMappable(cmap="flare", norm=norm)
-sm.set_array([])
-cbar = plt.colorbar(sm, ax=ax)
-cbar.set_label("NLTOCV testing fold")
+# --- plot ---
+class HandlerLineMarkerPatch(HandlerBase):
+    """Custom handler to draw line + marker + patch in one legend entry."""
+
+    def create_artists(
+        self, legend, orig_handle, xdescent, ydescent, width, height, fontsize, trans
+    ):
+        line_color, marker_style, patch_alpha = orig_handle
+        # Make rectangle taller and centered
+        patch_height = height * 1
+        patch = Rectangle(
+            [xdescent, ydescent + (height - patch_height) / 2],  # center it
+            width,
+            patch_height,
+            facecolor=line_color,
+            alpha=patch_alpha,
+            transform=trans,
+        )
+        # Line through center
+        line = Line2D(
+            [xdescent, xdescent + width],
+            [ydescent + height / 2] * 2,
+            color=line_color,
+            lw=2,
+            transform=trans,
+        )
+        # Marker at center
+        marker = Line2D(
+            [xdescent + width * 0.5],
+            [ydescent + height / 2],
+            color=line_color,
+            marker=marker_style,
+            markersize=8,
+            markeredgecolor="black",
+            transform=trans,
+            linestyle="",
+        )
+        return [patch, line, marker]
+
+
+# Plot
+fig, ax = plt.subplots()
+
+splits = df_val_summary_agg["Dataset split"].unique()
+palette = sns.color_palette("tab10", len(splits))
+markers = ["o", "s"]  # train, val
+marker_map = dict(zip(splits, markers))
+
+legend_handles = []
+
+for color, split in zip(palette, splits):
+    df_s = df_val_summary_agg[df_val_summary_agg["Dataset split"] == split]
+    marker = marker_map[split]
+
+    # Ribbon
+    ax.fill_between(
+        df_s["lambda_i"],
+        df_s["mean_loss"] - df_s["std_loss"],
+        df_s["mean_loss"] + df_s["std_loss"],
+        alpha=0.25,
+        color=color,
+        linewidth=0,
+        zorder=1,
+    )
+
+    # Line
+    sns.lineplot(
+        data=df_s,
+        x="lambda_i",
+        y="mean_loss",
+        ax=ax,
+        color=color,
+        zorder=2,
+    )
+
+    # Marker
+    sns.scatterplot(
+        data=df_s,
+        x="lambda_i",
+        y="mean_loss",
+        ax=ax,
+        color=color,
+        marker=marker,
+        s=40,
+        edgecolor="black",
+        zorder=3,
+    )
+
+    # Legend handle combines all three
+    legend_handles.append((color, marker, 0.25))
 
 ax.set_xlabel("Lambda")
 ax.set_ylabel("Log loss")
+ax.legend(
+    legend_handles,
+    splits,
+    handler_map={tuple: HandlerLineMarkerPatch()},
+    title="NLTOCV split\n±1 std. dev.",
+)
 plt.show()
 plt.close()
+# --- end plot ---
 
 best_lambdas = val_summary.loc[
     val_summary.groupby("test_idx")["Validation"].idxmin()
@@ -212,12 +291,13 @@ test_coefs = np.stack(outer_df.coefs)
 
 # %%
 if N_CLASSES == 3:
-    plot_multiclass_results(
+    metrics = plot_multiclass_results(
         outer_df["y_probs"], outer_df["y_true"], CLASS_IDS, PREDICTION_TASK
     )
 else:
-    plot_binary_results(outer_df["y_probs"], outer_df["y_true"], CLASS_IDS)
+    metrics = plot_binary_results(outer_df["y_probs"], outer_df["y_true"], CLASS_IDS)
 
+print(metrics)
 # %%
 test_coefs = test_coefs.squeeze()
 if len(test_coefs.shape) == 3:
@@ -243,10 +323,12 @@ if len(test_coefs.shape) == 3:
         plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
 
         # Boxplots
-        plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
-
-        # Var explained
-        plot_var_exp(most_robust_feats_df["Prop Var Exp"])
+        plot_coef_boxplot2(
+            most_robust_feats_df.filter(like="Test fold").T,
+            most_robust_feats_df["Prop Var Exp"],
+        )
+        # plot_coef_boxplot2(most_robust_feats_df.filter(like="Test fold").T)
+        # plot_var_exp(most_robust_feats_df["Prop Var Exp"])
 
         # Correlation matrix of top features
         feat_corr = X[most_robust_feats_df["Prop Var Exp"].index].corr()
@@ -278,16 +360,18 @@ else:
     )
     current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
     # most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
-    most_robust_feats_df = current_coefs_df.iloc[:5]
+    most_robust_feats_df = current_coefs_df.iloc[:10]
 
     # Heatmap
     plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
 
     # Boxplots
-    plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
-
-    # Var explained
-    plot_var_exp(most_robust_feats_df["Prop Var Exp"])
+    plot_coef_boxplot2(
+        most_robust_feats_df.filter(like="Test fold").T,
+        most_robust_feats_df["Prop Var Exp"],
+    )
+    # plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
+    # plot_var_exp2(most_robust_feats_df["Prop Var Exp"])
 
     # Correlation matrix of top features
     feat_corr = X[most_robust_feats_df["Prop Var Exp"].index].corr()
