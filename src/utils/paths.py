@@ -20,6 +20,7 @@ COLLAGE_DIR = FEATEX_DIR / "2_collage"
 MRIS_DIR = PREPROC_DIR / "7_COMPLETED_PREPROCESSED"
 SEGS_DIR = PREPROC_DIR / "8_ALL_SMOOTH_SEGS_02-08-25"
 LABELS_FILE = PREPROC_DIR / "0_LABELS" / "MeningiomaBiomarkerData.csv"
+METADATA_FILE = PREPROC_DIR / "0_LABELS" / "radiomics_cohort_06-09-2025_w_demographics_clean.csv"
 PULSES = ["T1_POST", "FLAIR", "DIFFUSION", "ADC"]
 ROIS = [1, 3, 4, 5, 6, 13, 15, 16, 156, 22]
 PYRAD_FILE = PYRAD_DIR / "b_aggregated_pyradiomics" / "12-08-2025_19-00-57_features.csv"

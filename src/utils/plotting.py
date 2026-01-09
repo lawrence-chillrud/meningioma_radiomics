@@ -169,7 +169,7 @@ def plot_bootstrap_roc(
     # lower_band = np.percentile(tprs, 2.5, axis=0)
     # upper_band = np.percentile(tprs, 97.5, axis=0)
 
-    # ± 2 stddev bands
+    # ± 1 stddev bands
     tpr_mean = tprs.mean(axis=0)
     tpr_std = tprs.std(axis=0)
 
@@ -180,6 +180,7 @@ def plot_bootstrap_roc(
     auc_std = np.std(aucs)
     auc_label = f"AUC = {auc_base:.3f} ± {auc_std:.3f}"
 
+    plt.figure(figsize=(4.8, 4.8))
     plt.plot(fpr_base, tpr_base, lw=2, label=auc_label, color="black")
     plt.plot([0, 1], [0, 1], linestyle="--", color="black")
 
@@ -238,7 +239,7 @@ def plot_binary_results(probs, y_true, class_ids):
 
 
 def plot_multiclass_bootstrap_roc(
-    y_true, probs, n_boot=10_000, stratified=True, random_state=None
+    y_true, probs, class_ids, n_boot=10_000, stratified=True, random_state=None
 ):
     rng = np.random.default_rng(random_state)
     y_true = np.asarray(y_true)
@@ -247,7 +248,7 @@ def plot_multiclass_bootstrap_roc(
     n_classes = y_true.shape[1]
     fpr_grid = np.linspace(0, 1, 1000)
 
-    fig, ax = plt.subplots(figsize=(9, 9))
+    fig, ax = plt.subplots(figsize=(6.4, 6.4))
 
     for c in range(n_classes):
         fpr_c, tpr_c, _ = roc_curve(y_true[:, c], probs[:, c])
@@ -260,6 +261,8 @@ def plot_multiclass_bootstrap_roc(
             stratified = False
 
         boot_tprs = []
+        boot_aucs = []
+
         for _ in range(n_boot):
             if stratified:
                 samp_pos = rng.choice(pos_idx, size=len(pos_idx), replace=True)
@@ -270,17 +273,32 @@ def plot_multiclass_bootstrap_roc(
             fpr_b, tpr_b, _ = roc_curve(y_true[samp_idx, c], probs[samp_idx, c])
             tpr_interp = np.interp(fpr_grid, fpr_b, tpr_b)
             boot_tprs.append(tpr_interp)
+            boot_aucs.append(auc(fpr_b, tpr_b))
 
         boot_tprs = np.array(boot_tprs)
-        lower = np.percentile(boot_tprs, 2.5, axis=0)
-        upper = np.percentile(boot_tprs, 97.5, axis=0)
+        boot_aucs = np.array(boot_aucs)
+        # lower = np.percentile(boot_tprs, 2.5, axis=0)
+        # upper = np.percentile(boot_tprs, 97.5, axis=0)
+        tpr_mean = boot_tprs.mean(axis=0)
+        tpr_std = boot_tprs.std(axis=0)
 
-        ax.plot(fpr_c, tpr_c, lw=2, label=f"Class {c} (AUC={auc_c:.3f})")
-        ax.fill_between(fpr_grid, lower, upper, alpha=0.2)
+        lower_band = tpr_mean - tpr_std
+        upper_band = tpr_mean + tpr_std
 
-    ax.plot([0, 1], [0, 1], "--", lw=1)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1.05)
+        auc_mean = np.mean(boot_aucs)
+        auc_std = np.std(boot_aucs)
+        auc_label = f"{class_ids[c]} AUC = {auc_c:.3f} ± {auc_std:.3f}"
+
+        plt.plot(fpr_c, tpr_c, lw=2, label=auc_label)
+
+        # Confidence band
+        plt.fill_between(
+            fpr_grid, lower_band, upper_band, alpha=0.25
+        )
+
+    ax.plot([0, 1], [0, 1], linestyle="--", color="black")
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(0.0, 1.0)
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
     # ax.set_title("One-vs-Rest ROC Curves with Bootstrap CIs")
@@ -295,6 +313,8 @@ def plot_multiclass_results(probs, y_true, class_ids, prediction_task):
     n_classes = len(np.unique(y_true))
     probs = np.stack(probs).squeeze()
     y_true = label_binarize(y_true, classes=np.unique(y_true))
+
+    plot_multiclass_bootstrap_roc(y_true, probs, class_ids)
 
     fpr, tpr, roc_auc = dict(), dict(), dict()
 
@@ -324,34 +344,34 @@ def plot_multiclass_results(probs, y_true, class_ids, prediction_task):
     # Plot 1/3: ROC curve
     _, ax = plt.subplots(figsize=(9, 9))
 
-    plt.plot(
-        fpr["micro"],
-        tpr["micro"],
-        label=f"micro-average ROC curve (AUC = {roc_auc['micro']:.2f})",
-        color="deeppink",
-        linestyle=":",
-        linewidth=4,
-    )
+    # plt.plot(
+    #     fpr["micro"],
+    #     tpr["micro"],
+    #     label=f"micro-average ROC curve (AUC = {roc_auc['micro']:.2f})",
+    #     color="deeppink",
+    #     linestyle=":",
+    #     linewidth=4,
+    # )
 
-    plt.plot(
-        fpr["macro"],
-        tpr["macro"],
-        label=f"macro-average ROC curve (AUC = {roc_auc['macro']:.2f})",
-        color="navy",
-        linestyle=":",
-        linewidth=4,
-    )
+    # plt.plot(
+    #     fpr["macro"],
+    #     tpr["macro"],
+    #     label=f"macro-average ROC curve (AUC = {roc_auc['macro']:.2f})",
+    #     color="navy",
+    #     linestyle=":",
+    #     linewidth=4,
+    # )
 
-    # colors = cycle(sns.color_palette())
-    # for i, color, class_id in zip(range(n_classes), colors, class_ids):
-    #     RocCurveDisplay.from_predictions(
-    #         y_true[:, i],
-    #         probs[:, i],
-    #         name=f"ROC curve for {class_id}",
-    #         color=color,
-    #         ax=ax,
-    #         plot_chance_level=(i == n_classes - 1),
-    #     )
+    colors = cycle(sns.color_palette())
+    for i, color, class_id in zip(range(n_classes), colors, class_ids):
+        RocCurveDisplay.from_predictions(
+            y_true[:, i],
+            probs[:, i],
+            name=f"ROC curve for {class_id}",
+            color=color,
+            ax=ax,
+            plot_chance_level=(i == n_classes - 1),
+        )
 
     _ = ax.set(
         xlabel="False Positive Rate",
