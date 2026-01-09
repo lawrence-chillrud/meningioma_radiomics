@@ -292,9 +292,7 @@ def plot_multiclass_bootstrap_roc(
         plt.plot(fpr_c, tpr_c, lw=2, label=auc_label)
 
         # Confidence band
-        plt.fill_between(
-            fpr_grid, lower_band, upper_band, alpha=0.25
-        )
+        plt.fill_between(fpr_grid, lower_band, upper_band, alpha=0.25)
 
     ax.plot([0, 1], [0, 1], linestyle="--", color="black")
     ax.set_xlim(0.0, 1.0)

@@ -54,7 +54,7 @@ from src.utils.plotting import *
 # User defined settings
 PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LOW_VAR_THRESH = None # or 0.2?
+LOW_VAR_THRESH = None  # or 0.2?
 MAX_WORKERS = 16
 LAMBDAS = np.linspace(0.05, 0.35, 30)
 LR_PARAMS = {
@@ -89,16 +89,19 @@ X, y, SUBJECTS = get_feats(
 )
 
 # Log run's metadata
-run_metadata_df = pd.DataFrame({
-    "PREDICTION_TASK": PREDICTION_TASK,
-    "SCALER": SCALER,
-    "LOW_VAR_THRESH": LOW_VAR_THRESH,
-    "LAMBDAS": [LAMBDAS],
-    "PYRAD_FILE": PYRAD_FILE,
-    "LABELS_FILE": LABELS_FILE,
-    "METADATA_FILE": METADATA_FILE,
-    "LR_PARAMS": [LR_PARAMS]
-}, index=[0])
+run_metadata_df = pd.DataFrame(
+    {
+        "PREDICTION_TASK": PREDICTION_TASK,
+        "SCALER": SCALER,
+        "LOW_VAR_THRESH": LOW_VAR_THRESH,
+        "LAMBDAS": [LAMBDAS],
+        "PYRAD_FILE": PYRAD_FILE,
+        "LABELS_FILE": LABELS_FILE,
+        "METADATA_FILE": METADATA_FILE,
+        "LR_PARAMS": [LR_PARAMS],
+    },
+    index=[0],
+)
 run_metadata_df.to_csv(OUTPUT_DIR / "run_metadata_df.csv", index=False)
 logging.info(f"<>" * 40)
 logging.info(f"Log file for {Path(__file__).name} run at {TIMESTAMP}")
@@ -110,6 +113,7 @@ N_CLASSES = len(set(y))
 CLASS_IDS = ["Intact", "Lost"]
 if N_CLASSES == 3:
     CLASS_IDS = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
+
 
 def val_job(test_idx, val_idx, lambda_i):
     # Data split
@@ -154,7 +158,9 @@ results = Parallel(n_jobs=MAX_WORKERS, backend="loky", verbose=0)(
 df = pd.DataFrame(results)
 
 df.to_csv(OUTPUT_DIR / "validation_loop.csv", index=False)
-logging.info("Step 1/2 complete. Validation loop results stored in: validation_loop.csv")
+logging.info(
+    "Step 1/2 complete. Validation loop results stored in: validation_loop.csv"
+)
 
 val_summary = (
     df.groupby(["test_idx", "lambda_i"])[["train_loss", "val_loss"]]
@@ -376,7 +382,7 @@ if len(test_coefs.shape) == 3:
         plot_coef_boxplot2(
             most_robust_feats_df.filter(like="Test fold").T,
             most_robust_feats_df["Prop Var Exp"],
-            figsize=(15, 4)
+            figsize=(15, 4),
         )
         # plot_coef_boxplot2(most_robust_feats_df.filter(like="Test fold").T)
         # plot_var_exp(most_robust_feats_df["Prop Var Exp"])
@@ -393,9 +399,7 @@ if len(test_coefs.shape) == 3:
         current_coefs_df["Prediction task"] = CLASS_IDS[c]
         output_dir = MODELING_DIR / "pyradiomics"
         output_dir.mkdir(parents=True, exist_ok=True)
-        current_coefs_df.to_csv(
-            OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv", index=False
-        )
+        current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv", index=False)
         logging.info(f"\tSaved {CLASS_IDS[c]}_coefs.csv")
 else:
     nonzero_feats_idxs = np.nonzero(np.sum(test_coefs, axis=0))[0]
@@ -420,7 +424,7 @@ else:
     plot_coef_boxplot2(
         most_robust_feats_df.filter(like="Test fold").T,
         most_robust_feats_df["Prop Var Exp"],
-        figsize=(15, 4)
+        figsize=(15, 4),
     )
     # plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
     # plot_var_exp2(most_robust_feats_df["Prop Var Exp"])
@@ -437,9 +441,7 @@ else:
     current_coefs_df["Prediction task"] = PREDICTION_TASK
     output_dir = MODELING_DIR / "pyradiomics"
     output_dir.mkdir(parents=True, exist_ok=True)
-    current_coefs_df.to_csv(
-        OUTPUT_DIR / f"coefs.csv", index=False
-    )
+    current_coefs_df.to_csv(OUTPUT_DIR / f"coefs.csv", index=False)
     logging.info("\tSaved coefs.csv")
 
 logging.info(f"Finished running {Path(__file__).name}")
