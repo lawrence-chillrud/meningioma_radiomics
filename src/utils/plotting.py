@@ -376,7 +376,7 @@ def plot_multiclass_results(probs, y_true, class_ids, prediction_task, plot=Fals
     y_true = np.argmax(y_true, axis=1)
     y_pred = np.argmax(probs, axis=1)
     if plot:
-        plot_confusion_matrix(y_true, y_pred, class_ids)
+        plot_confusion_matrix(y_true, y_pred, class_ids, plot=plot)
 
     # Plot 3/3: Metrics table
     metrics = {
