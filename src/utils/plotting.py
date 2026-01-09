@@ -84,48 +84,49 @@ def translate_feat_names(names):
     return new_names
 
 
-def plot_confusion_matrix(y_true, y_pred, class_ids):
+def plot_confusion_matrix(y_true, y_pred, class_ids, plot=False):
     conf_matrix = confusion_matrix(y_true, y_pred)
     conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1, keepdims=True)
     balanced_acc = balanced_accuracy_score(y_true, y_pred)
 
-    plt.figure(figsize=(4, 4))
-    ax = sns.heatmap(
-        conf_matrix_norm,
-        annot=False,
-        cmap="viridis",
-        cbar=False,
-        xticklabels=class_ids,
-        yticklabels=class_ids,
-        vmax=1,
-        vmin=0,
-    )
+    if plot:
+        plt.figure(figsize=(4, 4))
+        ax = sns.heatmap(
+            conf_matrix_norm,
+            annot=False,
+            cmap="viridis",
+            cbar=False,
+            xticklabels=class_ids,
+            yticklabels=class_ids,
+            vmax=1,
+            vmin=0,
+        )
 
-    # Overlay custom annotations
-    for i in range(conf_matrix.shape[0]):
-        for j in range(conf_matrix.shape[1]):
-            val_pct = conf_matrix_norm[i, j] * 100
-            val_count = conf_matrix[i, j]
-            ax.text(
-                j + 0.5,
-                i + 0.5,
-                f"{val_pct:.2f}%\n(n={val_count})",
-                ha="center",
-                va="center",
-                color="white",
-            )
+        # Overlay custom annotations
+        for i in range(conf_matrix.shape[0]):
+            for j in range(conf_matrix.shape[1]):
+                val_pct = conf_matrix_norm[i, j] * 100
+                val_count = conf_matrix[i, j]
+                ax.text(
+                    j + 0.5,
+                    i + 0.5,
+                    f"{val_pct:.2f}%\n(n={val_count})",
+                    ha="center",
+                    va="center",
+                    color="white",
+                )
 
-    plt.xlabel("Predicted labels")
-    plt.ylabel("True labels")
-    # plt.title(f"Balanced Accuracy = {balanced_acc*100:.2f}%")
-    plt.show()
-    plt.close()
+        plt.xlabel("Predicted labels")
+        plt.ylabel("True labels")
+        # plt.title(f"Balanced Accuracy = {balanced_acc*100:.2f}%")
+        plt.show()
+        plt.close()
 
     return conf_matrix, balanced_acc
 
 
 def plot_bootstrap_roc(
-    y_true, y_score, n_boot=10_000, stratified=True, random_state=None
+    y_true, y_score, n_boot=10_000, stratified=True, random_state=None, plot=False
 ):
     rng = np.random.default_rng(random_state)
     y_true = np.asarray(y_true)
@@ -179,39 +180,46 @@ def plot_bootstrap_roc(
     auc_mean = np.mean(aucs)
     auc_std = np.std(aucs)
     auc_label = f"AUC = {auc_base:.3f} ± {auc_std:.3f}"
+    if plot:
+        plt.figure(figsize=(4.8, 4.8))
+        plt.plot(fpr_base, tpr_base, lw=2, label=auc_label, color="black")
+        plt.plot([0, 1], [0, 1], linestyle="--", color="black")
 
-    plt.figure(figsize=(4.8, 4.8))
-    plt.plot(fpr_base, tpr_base, lw=2, label=auc_label, color="black")
-    plt.plot([0, 1], [0, 1], linestyle="--", color="black")
+        # Confidence band
+        plt.fill_between(
+            fpr_grid,
+            lower_band,
+            upper_band,
+            alpha=0.25,
+            color="grey",
+            label="±1 std. dev.",
+        )
 
-    # Confidence band
-    plt.fill_between(
-        fpr_grid, lower_band, upper_band, alpha=0.25, color="grey", label="±1 std. dev."
-    )
-
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.0])
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    # plt.title("ROC Curve with Bootstrap Confidence Bands")
-    plt.legend(loc="lower right")
-    plt.tight_layout()
-    plt.show()
-    plt.close()
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.0])
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        # plt.title("ROC Curve with Bootstrap Confidence Bands")
+        plt.legend(loc="lower right")
+        plt.tight_layout()
+        plt.show()
+        plt.close()
 
     return auc_base, auc_mean, fpr_base, tpr_base
 
 
-def plot_binary_results(probs, y_true, class_ids):
+def plot_binary_results(probs, y_true, class_ids, plot=False):
     """Plot ROC curve, confusion matrix, and metrics table for binary classification tasks. Returns the ROC AUC score."""
     probs = np.stack(probs).squeeze()
 
     # Plot 1/3: ROC curve
-    roc_auc, auc_mean, _, _ = plot_bootstrap_roc(y_true, probs[:, 1])
+    roc_auc, auc_mean, _, _ = plot_bootstrap_roc(y_true, probs[:, 1], plot=plot)
 
     # Plot 2/3: Confusion matrix
     y_pred = np.argmax(probs, axis=1)
-    conf_matrix, balanced_accuracy = plot_confusion_matrix(y_true, y_pred, class_ids)
+    conf_matrix, balanced_accuracy = plot_confusion_matrix(
+        y_true, y_pred, class_ids, plot=plot
+    )
 
     tn, fp, fn, tp = conf_matrix.ravel()
 
@@ -306,13 +314,14 @@ def plot_multiclass_bootstrap_roc(
     plt.close()
 
 
-def plot_multiclass_results(probs, y_true, class_ids, prediction_task):
+def plot_multiclass_results(probs, y_true, class_ids, prediction_task, plot=False):
     """Plot ROC curve, confusion matrix, and metrics table for multiclass classification tasks. Expects y_true to be one-hot encoded."""
     n_classes = len(np.unique(y_true))
     probs = np.stack(probs).squeeze()
     y_true = label_binarize(y_true, classes=np.unique(y_true))
 
-    plot_multiclass_bootstrap_roc(y_true, probs, class_ids)
+    if plot:
+        plot_multiclass_bootstrap_roc(y_true, probs, class_ids)
 
     fpr, tpr, roc_auc = dict(), dict(), dict()
 
@@ -340,50 +349,34 @@ def plot_multiclass_results(probs, y_true, class_ids, prediction_task):
     roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
 
     # Plot 1/3: ROC curve
-    _, ax = plt.subplots(figsize=(9, 9))
+    if plot:
+        _, ax = plt.subplots(figsize=(9, 9))
 
-    # plt.plot(
-    #     fpr["micro"],
-    #     tpr["micro"],
-    #     label=f"micro-average ROC curve (AUC = {roc_auc['micro']:.2f})",
-    #     color="deeppink",
-    #     linestyle=":",
-    #     linewidth=4,
-    # )
+        colors = cycle(sns.color_palette())
+        for i, color, class_id in zip(range(n_classes), colors, class_ids):
+            RocCurveDisplay.from_predictions(
+                y_true[:, i],
+                probs[:, i],
+                name=f"ROC curve for {class_id}",
+                color=color,
+                ax=ax,
+                plot_chance_level=(i == n_classes - 1),
+            )
 
-    # plt.plot(
-    #     fpr["macro"],
-    #     tpr["macro"],
-    #     label=f"macro-average ROC curve (AUC = {roc_auc['macro']:.2f})",
-    #     color="navy",
-    #     linestyle=":",
-    #     linewidth=4,
-    # )
-
-    colors = cycle(sns.color_palette())
-    for i, color, class_id in zip(range(n_classes), colors, class_ids):
-        RocCurveDisplay.from_predictions(
-            y_true[:, i],
-            probs[:, i],
-            name=f"ROC curve for {class_id}",
-            color=color,
-            ax=ax,
-            plot_chance_level=(i == n_classes - 1),
+        _ = ax.set(
+            xlabel="False Positive Rate",
+            ylabel="True Positive Rate",
+            title=f"{prediction_task}: One-vs-Rest ROC Curves",
         )
 
-    _ = ax.set(
-        xlabel="False Positive Rate",
-        ylabel="True Positive Rate",
-        title=f"{prediction_task}: One-vs-Rest ROC Curves",
-    )
-
-    plt.show()
-    plt.close()
+        plt.show()
+        plt.close()
 
     # Plot 2/3: Confusion matrix
     y_true = np.argmax(y_true, axis=1)
     y_pred = np.argmax(probs, axis=1)
-    plot_confusion_matrix(y_true, y_pred, class_ids)
+    if plot:
+        plot_confusion_matrix(y_true, y_pred, class_ids)
 
     # Plot 3/3: Metrics table
     metrics = {

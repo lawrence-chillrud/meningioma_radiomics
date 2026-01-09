@@ -26,6 +26,7 @@ This is highly parallelizable. We can parallelize:
 """
 
 # %%
+# Imports
 import os
 import sys
 
@@ -35,14 +36,9 @@ from itertools import product
 
 from datetime import datetime
 import logging
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-from matplotlib.lines import Line2D
-from matplotlib.legend_handler import HandlerBase
 import numpy as np
 from pathlib import Path
 import pandas as pd
-import seaborn as sns
 from joblib import Parallel, delayed
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
@@ -71,6 +67,7 @@ TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 OUTPUT_DIR = MODELING_DIR / "pyradiomics" / PREDICTION_TASK / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
+
 # Setup logfile
 logging.basicConfig(
     filename=LOGFILE,
@@ -115,6 +112,7 @@ if N_CLASSES == 3:
     CLASS_IDS = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
 
 
+# Run validation loop, save results
 def val_job(test_idx, val_idx, lambda_i):
     # Data split
     train_idx = [k for k in range(N) if k not in (test_idx, val_idx)]
@@ -170,129 +168,6 @@ val_summary = (
 val_summary = val_summary.rename(
     columns={"train_loss": "Training", "val_loss": "Validation"}
 )
-val_summary_long = val_summary.melt(
-    id_vars=["test_idx", "lambda_i"], var_name="Dataset split", value_name="loss"
-)
-df_val_summary_agg = (
-    val_summary_long.groupby(["lambda_i", "Dataset split"])
-    .agg(
-        mean_loss=("loss", "mean"),
-        std_loss=("loss", "std"),
-        n=("loss", "count"),
-    )
-    .reset_index()
-)
-# 95% CI using std-dev
-df_val_summary_agg["ci_low"] = df_val_summary_agg[
-    "mean_loss"
-] - 1.96 * df_val_summary_agg["std_loss"] / np.sqrt(df_val_summary_agg["n"])
-df_val_summary_agg["ci_high"] = df_val_summary_agg[
-    "mean_loss"
-] + 1.96 * df_val_summary_agg["std_loss"] / np.sqrt(df_val_summary_agg["n"])
-
-
-# --- plot ---
-class HandlerLineMarkerPatch(HandlerBase):
-    """Custom handler to draw line + marker + patch in one legend entry."""
-
-    def create_artists(
-        self, legend, orig_handle, xdescent, ydescent, width, height, fontsize, trans
-    ):
-        line_color, marker_style, patch_alpha = orig_handle
-        # Make rectangle taller and centered
-        patch_height = height * 1
-        patch = Rectangle(
-            [xdescent, ydescent + (height - patch_height) / 2],  # center it
-            width,
-            patch_height,
-            facecolor=line_color,
-            alpha=patch_alpha,
-            transform=trans,
-        )
-        # Line through center
-        line = Line2D(
-            [xdescent, xdescent + width],
-            [ydescent + height / 2] * 2,
-            color=line_color,
-            lw=2,
-            transform=trans,
-        )
-        # Marker at center
-        marker = Line2D(
-            [xdescent + width * 0.5],
-            [ydescent + height / 2],
-            color=line_color,
-            marker=marker_style,
-            markersize=8,
-            markeredgecolor="black",
-            transform=trans,
-            linestyle="",
-        )
-        return [patch, line, marker]
-
-
-# Plot
-fig, ax = plt.subplots()
-
-splits = df_val_summary_agg["Dataset split"].unique()
-palette = sns.color_palette("tab10", len(splits))
-markers = ["o", "s"]  # train, val
-marker_map = dict(zip(splits, markers))
-
-legend_handles = []
-
-for color, split in zip(palette, splits):
-    df_s = df_val_summary_agg[df_val_summary_agg["Dataset split"] == split]
-    marker = marker_map[split]
-
-    # Ribbon
-    ax.fill_between(
-        df_s["lambda_i"],
-        df_s["mean_loss"] - df_s["std_loss"],
-        df_s["mean_loss"] + df_s["std_loss"],
-        alpha=0.25,
-        color=color,
-        linewidth=0,
-        zorder=1,
-    )
-
-    # Line
-    sns.lineplot(
-        data=df_s,
-        x="lambda_i",
-        y="mean_loss",
-        ax=ax,
-        color=color,
-        zorder=2,
-    )
-
-    # Marker
-    sns.scatterplot(
-        data=df_s,
-        x="lambda_i",
-        y="mean_loss",
-        ax=ax,
-        color=color,
-        marker=marker,
-        s=40,
-        edgecolor="black",
-        zorder=3,
-    )
-
-    # Legend handle combines all three
-    legend_handles.append((color, marker, 0.25))
-
-ax.set_xlabel("Inverse regularization strength (1/λ)")
-ax.set_ylabel("Log loss")
-ax.legend(
-    legend_handles,
-    splits,
-    handler_map={tuple: HandlerLineMarkerPatch()},
-    title="NLTOCV split\n±1 std. dev.",
-)
-plt.show()
-plt.close()
-# --- end plot ---
 
 best_lambdas = val_summary.loc[
     val_summary.groupby("test_idx")["Validation"].idxmin()
@@ -304,6 +179,7 @@ best_lambdas.value_counts().to_csv(OUTPUT_DIR / "best_lambdas_counts.csv")
 logging.info("\tSaved best_lambdas_counts.csv")
 
 
+# Run testing loop, save reults
 def test_job(test_idx, test_lambda):
     # Data split
     train_idx = [k for k in range(N) if k != test_idx]
@@ -342,7 +218,7 @@ outer_df.to_csv(OUTPUT_DIR / "testing_loop.csv", index=False)
 logging.info("Step 2/2 complete. Testing loop results stored in: testing_loop.csv")
 test_coefs = np.stack(outer_df.coefs)
 
-# %%
+# Get test set performance metrics, save
 if N_CLASSES == 3:
     metrics = plot_multiclass_results(
         outer_df["y_probs"], outer_df["y_true"], ["MI", "IE", "HM"], PREDICTION_TASK
@@ -352,8 +228,8 @@ else:
 
 pd.DataFrame(metrics, index=[0]).to_csv(OUTPUT_DIR / "testing_metrics.csv", index=False)
 logging.info("\tTesting metrics saved to: testing_metrics.csv")
-print(metrics)
-# %%
+
+# Get coefs, save
 test_coefs = test_coefs.squeeze()
 if len(test_coefs.shape) == 3:
     for c in range(test_coefs.shape[1]):
@@ -372,34 +248,10 @@ if len(test_coefs.shape) == 3:
             current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
         )
         current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-        # most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
-        most_robust_feats_df = current_coefs_df.iloc[:5]
-
-        # Heatmap
-        plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
-
-        # Boxplots
-        plot_coef_boxplot2(
-            most_robust_feats_df.filter(like="Test fold").T,
-            most_robust_feats_df["Prop Var Exp"],
-            figsize=(15, 4),
-        )
-        # plot_coef_boxplot2(most_robust_feats_df.filter(like="Test fold").T)
-        # plot_var_exp(most_robust_feats_df["Prop Var Exp"])
-
-        # Correlation matrix of top features
-        feat_corr = X[most_robust_feats_df["Prop Var Exp"].index].corr()
-        plot_corr_matrix(feat_corr)
-
-        # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
-        # Frequency stability
-        (current_coefs_df.filter(like="Test fold") != 0).T.mean()
 
         current_coefs_df["Feature"] = current_coefs_df.index
         current_coefs_df["Prediction task"] = CLASS_IDS[c]
-        output_dir = MODELING_DIR / "pyradiomics"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv", index=False)
+        current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv")
         logging.info(f"\tSaved {CLASS_IDS[c]}_coefs.csv")
 else:
     nonzero_feats_idxs = np.nonzero(np.sum(test_coefs, axis=0))[0]
@@ -414,36 +266,11 @@ else:
         current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
     )
     current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-    # most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
-    most_robust_feats_df = current_coefs_df.iloc[:5]
-
-    # Heatmap
-    plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
-
-    # Boxplots
-    plot_coef_boxplot2(
-        most_robust_feats_df.filter(like="Test fold").T,
-        most_robust_feats_df["Prop Var Exp"],
-        figsize=(15, 4),
-    )
-    # plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
-    # plot_var_exp2(most_robust_feats_df["Prop Var Exp"])
-
-    # Correlation matrix of top features
-    feat_corr = X[most_robust_feats_df["Prop Var Exp"].index].corr()
-    plot_corr_matrix(feat_corr)
-
-    # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
-    # Frequency stability
-    (current_coefs_df.filter(like="Test fold") != 0).T.mean()
 
     current_coefs_df["Feature"] = current_coefs_df.index
     current_coefs_df["Prediction task"] = PREDICTION_TASK
-    output_dir = MODELING_DIR / "pyradiomics"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    current_coefs_df.to_csv(OUTPUT_DIR / f"coefs.csv", index=False)
+    current_coefs_df.to_csv(OUTPUT_DIR / f"coefs.csv")
     logging.info("\tSaved coefs.csv")
 
 logging.info(f"Finished running {Path(__file__).name}")
 logging.info(f"<>" * 40)
-# %%
