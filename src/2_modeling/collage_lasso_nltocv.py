@@ -25,7 +25,7 @@ This is highly parallelizable. We can parallelize:
 2. All necessary models runs invoked by the outermost loop (testing loop)
 """
 
-# %%
+# %% Imports
 import os
 import sys
 
@@ -33,8 +33,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 
 from itertools import product
 
+from datetime import datetime
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 import pandas as pd
 import seaborn as sns
 from joblib import Parallel, delayed
@@ -42,17 +45,26 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 from tqdm import tqdm
 
-from src.utils import COLLAGE_DIR, MODELING_DIR, get_feats
+from src.utils import (
+    PYRAD_FILE,
+    LABELS_FILE,
+    METADATA_FILE,
+    COLLAGE_DIR,
+    MODELING_DIR,
+    get_feats,
+)
 from src.utils.plotting import *
 
-MAX_WORKERS = 16
-FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
-HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
-BIN_SIZES = [16, 32, 48, 64]
+# User defined settings
 PREDICTION_TASK = (
     "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 )
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
+LOW_VAR_THRESH = None  # or 0.2?
+MAX_WORKERS = 16
+FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
+HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
+BIN_SIZES = [16, 32, 48, 64]
 LAMBDAS = np.linspace(0.05, 0.35, 10).round(2)
 LR_PARAMS = {
     "penalty": "l1",
@@ -63,6 +75,21 @@ LR_PARAMS = {
     "verbose": 0,
 }
 
+# Output dir and logfile set up
+TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+OUTPUT_DIR = MODELING_DIR / "collage" / PREDICTION_TASK / TIMESTAMP
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+LOGFILE = OUTPUT_DIR / "logfile.txt"
+
+# Setup logfile
+logging.basicConfig(
+    filename=LOGFILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+# Read in data
+metadata_df = pd.read_csv(METADATA_FILE)
 Xs, ys, SUBJECTS = {}, {}, {}
 for f in tqdm(
     FEATURES_PATHS,
@@ -72,9 +99,33 @@ for f in tqdm(
 ):
     fname = " ".join(f.name.replace(".csv", "").split("_")[1:])  # e.g. 'win-7 bin-48'
     Xs[fname], ys[fname], SUBJECTS[fname] = get_feats(
-        prediction_task=PREDICTION_TASK, features_path=f, scaler=SCALER
+        prediction_task=PREDICTION_TASK,
+        features_path=f,
+        labels_path=LABELS_FILE,
+        scaler=SCALER,
+        low_var_thresh=LOW_VAR_THRESH,
     )
 
+# Log run's metadata
+run_metadata_df = pd.DataFrame(
+    {
+        "PREDICTION_TASK": PREDICTION_TASK,
+        "SCALER": SCALER,
+        "LOW_VAR_THRESH": LOW_VAR_THRESH,
+        "LAMBDAS": [LAMBDAS],
+        "COLLAGE_DIR": COLLAGE_DIR,
+        "LABELS_FILE": LABELS_FILE,
+        "METADATA_FILE": METADATA_FILE,
+        "LR_PARAMS": [LR_PARAMS],
+    },
+    index=[0],
+)
+run_metadata_df.to_csv(OUTPUT_DIR / "run_metadata_df.csv", index=False)
+logging.info(f"<>" * 40)
+logging.info(f"Log file for {Path(__file__).name} run at {TIMESTAMP}")
+logging.info(f"Settings used for run stored in: run_metadata_df.csv")
+
+# Variables based on data read in
 N = len(
     Xs["win-7 bin-48"]
 )  # doesn't actually matter which one, across all Xs, N is the same
@@ -84,6 +135,7 @@ if N_CLASSES == 3:
     CLASS_IDS = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
 
 
+# Run validation loop, save results
 def val_job(test_idx, val_idx, lambda_i, win_size, bin_size):
     X = Xs[f"win-{win_size} bin-{bin_size}"]
     y = ys[f"win-{win_size} bin-{bin_size}"]
@@ -124,7 +176,6 @@ val_loop = [
     if n != m
 ]
 
-# %%
 results = Parallel(n_jobs=MAX_WORKERS, backend="loky", verbose=0)(
     delayed(val_job)(test_idx, val_idx, lambda_i, win_size, bin_size)
     for test_idx, val_idx, lambda_i, win_size, bin_size in tqdm(
@@ -133,12 +184,11 @@ results = Parallel(n_jobs=MAX_WORKERS, backend="loky", verbose=0)(
 )
 
 df = pd.DataFrame(results)
-df.to_csv(f"{PREDICTION_TASK}_collage_gridsearch.csv", index=False)
+df.to_csv(OUTPUT_DIR / "validation_loop.csv", index=False)
+logging.info(
+    "Step 1/2 complete. Validation loop results stored in: validation_loop.csv"
+)
 
-# %%
-df = pd.read_csv(f"{PREDICTION_TASK}_collage_gridsearch.csv")
-
-# %%
 val_summary = (
     df.groupby(["test_idx", "lambda_i", "win_size", "bin_size"])[
         ["train_loss", "val_loss"]
@@ -155,37 +205,18 @@ val_summary_long = val_summary.melt(
     value_name="loss",
 )
 
-if val_summary["test_idx"].nunique() > 1:
-    best_hyperparams = (
-        val_summary_long[val_summary_long["Dataset split"] == "Validation"]
-        .loc[lambda df: df.groupby(["test_idx"])["loss"].idxmin()]
-        .reset_index(drop=True)
-    )
-else:
-    collage_stats = (
-        val_summary_long[val_summary_long["Dataset split"] == "Validation"]
-        .drop(columns=["test_idx", "Dataset split"])
-        .loc[lambda df: df.groupby(["win_size", "bin_size"])["loss"].idxmin()]
-    )
-    np.array(collage_stats["bin_size"]).reshape(4, 4)
-    np.array(collage_stats["win_size"]).reshape(4, 4)
-    np.array(collage_stats["loss"]).reshape(4, 4)
-    plt.figure()
-    sns.heatmap(
-        np.array(collage_stats["loss"]).reshape(4, 4),
-        xticklabels=np.unique(collage_stats["bin_size"]),
-        yticklabels=np.unique(collage_stats["win_size"]),
-        annot=np.array(collage_stats["lambda_i"]).reshape(4, 4),
-    )
-    plt.xlabel("Bin size")
-    plt.ylabel("Window size")
-    plt.show()
-    plt.close()
-
-# sns.relplot(val_summary_long, kind="line", x="lambda_i", y="loss", style="Dataset split", col="win_size", row="bin_size")
+best_hyperparams = (
+    val_summary_long[val_summary_long["Dataset split"] == "Validation"]
+    .loc[lambda df: df.groupby(["test_idx"])["loss"].idxmin()]
+    .reset_index(drop=True)
+)
+best_hyperparams.to_csv(OUTPUT_DIR / "best_lambdas.csv")
+logging.info("\tSaved best_lambdas.csv")
+best_hyperparams.value_counts().to_csv(OUTPUT_DIR / "best_lambdas_counts.csv")
+logging.info("\tSaved best_lambdas_counts.csv")
 
 
-# %%
+# Run testing loop, save reults
 def test_job(test_idx):
     test_lambda = best_hyperparams["lambda_i"][test_idx]
     test_win_size = best_hyperparams["win_size"][test_idx]
@@ -226,17 +257,23 @@ outer_results = Parallel(n_jobs=MAX_WORKERS)(
     for i in tqdm(range(N), total=N, ncols=120, desc="Step 2/2: Test loop")
 )
 outer_df = pd.DataFrame(outer_results)
+outer_df["Subject Number"] = SUBJECTS
+outer_df.to_csv(OUTPUT_DIR / "testing_loop.csv", index=False)
+logging.info("Step 2/2 complete. Testing loop results stored in: testing_loop.csv")
 test_coefs = np.stack(outer_df.coefs)
 
-# %%
+# Get test set performance metrics, save
 if N_CLASSES == 3:
-    plot_multiclass_results(
-        outer_df["y_probs"], outer_df["y_true"], CLASS_IDS, PREDICTION_TASK
+    metrics = plot_multiclass_results(
+        outer_df["y_probs"], outer_df["y_true"], ["MI", "IE", "HM"], PREDICTION_TASK
     )
 else:
-    plot_binary_results(outer_df["y_probs"], outer_df["y_true"], CLASS_IDS)
+    metrics = plot_binary_results(outer_df["y_probs"], outer_df["y_true"], CLASS_IDS)
 
-# %%
+pd.DataFrame(metrics, index=[0]).to_csv(OUTPUT_DIR / "testing_metrics.csv", index=False)
+logging.info("\tTesting metrics saved to: testing_metrics.csv")
+
+# Get coefs, save
 test_coefs = test_coefs.squeeze()
 if len(test_coefs.shape) == 3:
     for c in range(test_coefs.shape[1]):
@@ -255,34 +292,10 @@ if len(test_coefs.shape) == 3:
             current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
         )
         current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-        most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
-
-        # Heatmap
-        plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
-
-        # Boxplots
-        plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
-
-        # Var explained
-        plot_var_exp(most_robust_feats_df["Prop Var Exp"])
-
-        # Correlation matrix of top features
-        feat_corr = Xs["win-9 bin-64"][
-            most_robust_feats_df["Prop Var Exp"].index
-        ].corr()
-        plot_corr_matrix(feat_corr)
-
-        # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
-        # Frequency stability
-        (current_coefs_df.filter(like="Test fold") != 0).T.mean()
-
         current_coefs_df["Feature"] = current_coefs_df.index
         current_coefs_df["Prediction task"] = CLASS_IDS[c]
-        output_dir = MODELING_DIR / "pyradiomics"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        current_coefs_df.to_csv(
-            MODELING_DIR / "pyradiomics" / f"{CLASS_IDS[c]}_coefs.csv", index=False
-        )
+        current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv")
+        logging.info(f"\tSaved {CLASS_IDS[c]}_coefs.csv")
 
 else:
     nonzero_feats_idxs = np.nonzero(np.sum(test_coefs, axis=0))[0]
@@ -297,53 +310,10 @@ else:
         current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
     )
     current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-    most_robust_feats_df = current_coefs_df[current_coefs_df["Cum Var Exp"] < 0.95]
-
-    # Heatmap
-    plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
-
-    # Boxplots
-    plot_coef_boxplot(most_robust_feats_df.filter(like="Test fold").T)
-
-    # Var explained
-    plot_var_exp(most_robust_feats_df["Prop Var Exp"])
-
-    # Correlation matrix of top features
-    feat_corr = Xs["win-9 bin-64"][most_robust_feats_df["Prop Var Exp"].index].corr()
-    plot_corr_matrix(feat_corr)
-
-    # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
-    # Frequency stability
-    (current_coefs_df.filter(like="Test fold") != 0).T.mean()
-
     current_coefs_df["Feature"] = current_coefs_df.index
     current_coefs_df["Prediction task"] = PREDICTION_TASK
-    output_dir = MODELING_DIR / "pyradiomics"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    current_coefs_df.to_csv(
-        MODELING_DIR / "pyradiomics" / f"{PREDICTION_TASK}_coefs.csv", index=False
-    )
+    current_coefs_df.to_csv(OUTPUT_DIR / "coefs.csv")
+    logging.info("\tSaved coefs.csv")
 
-# %%
-from src.utils import MRIS_DIR
-
-incorrect_subjects = SUBJECTS[
-    f"win-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][0]} bin-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][1]}"
-][outer_df[outer_df["y_true"] != outer_df["y_pred"]].test_idx.to_list()]
-mri_filepaths = MRIS_DIR.rglob("*Presurgical*")
-
-sessions = {}
-for subject in MRIS_DIR.iterdir():
-    if subject.is_dir():
-        for session in (MRIS_DIR / subject).iterdir():
-            if session.is_dir():
-                sessions[int(subject.name)] = " ".join(session.name.split("_")[1:])
-
-incorrect_sessions = []
-for s in incorrect_subjects:
-    incorrect_sessions.append(sessions[s])
-print("INCORRECT SESSIONS:\n", pd.Series(incorrect_sessions).value_counts())
-
-print("TOTAL SESSIONS:\n", pd.Series(sessions.values()).value_counts())
-
-# %%
+logging.info(f"Finished running {Path(__file__).name}")
+logging.info(f"<>" * 40)

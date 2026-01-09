@@ -48,9 +48,11 @@ from src.utils import PYRAD_FILE, LABELS_FILE, METADATA_FILE, MODELING_DIR, get_
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = (
+    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LOW_VAR_THRESH = None  # or 0.2?
+LOW_VAR_THRESH = 0.2  # or 0.2?
 MAX_WORKERS = 16
 LAMBDAS = np.linspace(0.05, 0.35, 30)
 LR_PARAMS = {
@@ -154,7 +156,6 @@ results = Parallel(n_jobs=MAX_WORKERS, backend="loky", verbose=0)(
 )
 
 df = pd.DataFrame(results)
-
 df.to_csv(OUTPUT_DIR / "validation_loop.csv", index=False)
 logging.info(
     "Step 1/2 complete. Validation loop results stored in: validation_loop.csv"
@@ -248,7 +249,6 @@ if len(test_coefs.shape) == 3:
             current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
         )
         current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-
         current_coefs_df["Feature"] = current_coefs_df.index
         current_coefs_df["Prediction task"] = CLASS_IDS[c]
         current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv")
@@ -269,7 +269,7 @@ else:
 
     current_coefs_df["Feature"] = current_coefs_df.index
     current_coefs_df["Prediction task"] = PREDICTION_TASK
-    current_coefs_df.to_csv(OUTPUT_DIR / f"coefs.csv")
+    current_coefs_df.to_csv(OUTPUT_DIR / "coefs.csv")
     logging.info("\tSaved coefs.csv")
 
 logging.info(f"Finished running {Path(__file__).name}")

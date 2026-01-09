@@ -16,7 +16,9 @@ from src.utils.plotting import *
 from src.utils import MODELING_DIR, get_feats
 
 # %% User defined variables to select proper experiment
-PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = (
+    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+)
 FEATURE_SET = "pyradiomics"  # can be one of "pyradiomics" or "collage"
 EXP_DIRS = [
     d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()
@@ -68,6 +70,29 @@ if N_CLASSES == 3:
     CLASS_IDS = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
 
 # %% Cross val fig
+
+# Collage cross-val plot (only one test index for the below... needs to be adapted for all test idxs)
+# collage_stats = (
+#     val_summary_long[val_summary_long["Dataset split"] == "Validation"]
+#     .drop(columns=["test_idx", "Dataset split"])
+#     .loc[lambda df: df.groupby(["win_size", "bin_size"])["loss"].idxmin()]
+# )
+# np.array(collage_stats["bin_size"]).reshape(4, 4)
+# np.array(collage_stats["win_size"]).reshape(4, 4)
+# np.array(collage_stats["loss"]).reshape(4, 4)
+# plt.figure()
+# sns.heatmap(
+#     np.array(collage_stats["loss"]).reshape(4, 4),
+#     xticklabels=np.unique(collage_stats["bin_size"]),
+#     yticklabels=np.unique(collage_stats["win_size"]),
+#     annot=np.array(collage_stats["lambda_i"]).reshape(4, 4),
+# )
+# plt.xlabel("Bin size")
+# plt.ylabel("Window size")
+# plt.show()
+# plt.close()
+
+
 val_summary = (
     val_loop.groupby(["test_idx", "lambda_i"])[["train_loss", "val_loss"]]
     .mean()
@@ -228,7 +253,34 @@ for c in coefs:
     feat_corr = X[most_robust_feats_df["Prop Var Exp"].index].corr()
     plot_corr_matrix(feat_corr)
 
+    # # CoLlAGe Correlation matrix of top features
+    # feat_corr = Xs["win-9 bin-64"][
+    #     most_robust_feats_df["Prop Var Exp"].index
+    # ].corr()
+    # plot_corr_matrix(feat_corr)
+
     # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
     # Frequency stability
     (coefs[c].filter(like="Test fold") != 0).T.mean()
 # %%
+# CoLlAGe error analysis
+# from src.utils import MRIS_DIR
+
+# incorrect_subjects = SUBJECTS[
+#     f"win-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][0]} bin-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][1]}"
+# ][outer_df[outer_df["y_true"] != outer_df["y_pred"]].test_idx.to_list()]
+# mri_filepaths = MRIS_DIR.rglob("*Presurgical*")
+
+# sessions = {}
+# for subject in MRIS_DIR.iterdir():
+#     if subject.is_dir():
+#         for session in (MRIS_DIR / subject).iterdir():
+#             if session.is_dir():
+#                 sessions[int(subject.name)] = " ".join(session.name.split("_")[1:])
+
+# incorrect_sessions = []
+# for s in incorrect_subjects:
+#     incorrect_sessions.append(sessions[s])
+# print("INCORRECT SESSIONS:\n", pd.Series(incorrect_sessions).value_counts())
+
+# print("TOTAL SESSIONS:\n", pd.Series(sessions.values()).value_counts())
