@@ -35,18 +35,15 @@ from itertools import product
 
 from datetime import datetime
 import logging
-import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 import pandas as pd
-import seaborn as sns
 from joblib import Parallel, delayed
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 from tqdm import tqdm
 
 from src.utils import (
-    PYRAD_FILE,
     LABELS_FILE,
     METADATA_FILE,
     COLLAGE_DIR,
