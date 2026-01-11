@@ -53,9 +53,9 @@ SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None if PREDICTION_TASK != "MethylationSubgroup" else 0.2
 MAX_WORKERS = 16
 LAMBDAS = (
-    np.linspace(0.05, 0.35, 30)
+    np.linspace(0.05, 0.8, 30)
     if PREDICTION_TASK == "Chr22q"
-    else np.linspace(0.05, 0.8, 30)
+    else np.linspace(0.05, 0.35, 30)
 )
 LR_PARAMS = {
     "penalty": "l1",
