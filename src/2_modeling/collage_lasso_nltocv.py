@@ -53,16 +53,14 @@ from src.utils import (
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = (
-    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
-)
+PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
 MAX_WORKERS = 16
 FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
 HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
 BIN_SIZES = [16, 32, 48, 64]
-LAMBDAS = np.linspace(0.05, 0.35, 10).round(2)
+LAMBDAS = np.linspace(0.05, 0.35, 10)
 LR_PARAMS = {
     "penalty": "l1",
     "class_weight": "balanced",

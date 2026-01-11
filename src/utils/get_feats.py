@@ -10,6 +10,7 @@ def clean_feature_names(strings):
         "Mod-AX_3D_",
         "Mod-SAG_3D_",
         "_POST",
+        "POST",
         "Mod-AX_",
         "SegLab-",
         "Feat-original_",
