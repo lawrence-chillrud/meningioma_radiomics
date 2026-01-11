@@ -30,6 +30,7 @@ def get_segs(
     subject: Union[str, int],
     segs_dir: Path = SEGS_DIR,
     rois: Union[int, List[int]] = ROIS,
+    reorient: str = "IAL",
     with_sitk: bool = False,
 ):
     """
@@ -40,6 +41,7 @@ def get_segs(
     subject (str or int): The subject ID number.
     segs_dir (Path): The directory containing the segmentation masks.
     rois (List[int]): The regions of interest (rois) to extract from the available segmentation mask(s).
+    reorient (str): Sent to antsPy's image_read fn to reorient the seg when loading it. Ignored when with_sitk=True.
     with_sitk (bool): Whether to read & return segmentations with antsPy (False) or sitk (True). Useful if needing
     segmentations for pyradiomics feature extraction, which expects the segs as sitk objects.
 
@@ -88,7 +90,7 @@ def get_segs(
                 seg_sitk.GetDirection(),
             )
         else:
-            seg_arr = image_read(str(f), reorient="IAL").numpy()
+            seg_arr = image_read(str(f), reorient=reorient).numpy()
         all_seg_arrays.append(seg_arr)
         all_seg_labels.extend([int(v) for v in np.unique(seg_arr) if v != 0])
 

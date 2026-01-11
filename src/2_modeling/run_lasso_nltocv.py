@@ -48,13 +48,15 @@ from src.utils import PYRAD_FILE, LABELS_FILE, METADATA_FILE, MODELING_DIR, get_
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = (
-    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
-)
+PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LOW_VAR_THRESH = 0.2  # or 0.2?
+LOW_VAR_THRESH = None if PREDICTION_TASK != "MethylationSubgroup" else 0.2
 MAX_WORKERS = 16
-LAMBDAS = np.linspace(0.05, 0.35, 30)
+LAMBDAS = (
+    np.linspace(0.05, 0.35, 30)
+    if PREDICTION_TASK == "Chr22q"
+    else np.linspace(0.05, 0.8, 30)
+)
 LR_PARAMS = {
     "penalty": "l1",
     "class_weight": "balanced",
@@ -195,9 +197,6 @@ def test_job(test_idx, test_lambda):
     y_probs = model.predict_proba(X_test)
     test_loss = log_loss(y_test, y_probs, labels=np.unique(y))
 
-    # Save coefficients
-    coefs = model.coef_
-
     return dict(
         test_idx=test_idx,
         test_lambda=test_lambda,
@@ -205,7 +204,8 @@ def test_job(test_idx, test_lambda):
         y_true=y_test[0],
         y_probs=y_probs,
         y_pred=y_probs.argmax(),
-        coefs=coefs,
+        coefs=model.coef_,
+        intercept=model.intercept_,
     )
 
 

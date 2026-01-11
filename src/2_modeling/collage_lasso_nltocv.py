@@ -53,7 +53,7 @@ from src.utils import (
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
 MAX_WORKERS = 16
@@ -130,6 +130,7 @@ if N_CLASSES == 3:
     CLASS_IDS = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
 
 
+# %%
 # Run validation loop, save results
 def val_job(test_idx, val_idx, lambda_i, win_size, bin_size):
     X = Xs[f"win-{win_size} bin-{bin_size}"]
@@ -233,9 +234,6 @@ def test_job(test_idx):
     y_probs = model.predict_proba(X_test)
     test_loss = log_loss(y_test, y_probs, labels=np.unique(y))
 
-    # Save coefficients
-    coefs = model.coef_
-
     return dict(
         test_idx=test_idx,
         test_lambda=test_lambda,
@@ -243,7 +241,8 @@ def test_job(test_idx):
         y_true=y_test[0],
         y_probs=y_probs,
         y_pred=y_probs.argmax(),
-        coefs=coefs,
+        coefs=model.coef_,
+        intercept=model.intercept_,
     )
 
 
