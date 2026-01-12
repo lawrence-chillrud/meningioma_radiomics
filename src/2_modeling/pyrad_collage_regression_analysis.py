@@ -38,7 +38,7 @@ OUTPUT_DIR = MODELING_DIR / "regression_analysis" / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
 
-# Setup logfile
+# %% Setup logfile
 logging.basicConfig(
     filename=LOGFILE,
     level=logging.INFO,
@@ -366,6 +366,7 @@ def combined_relplot(df, max_counts):
     ax.set_ylabel(r"Num PyRadiomics predictors used in reconstruction")
 
 
+# %%
 all_counts = [
     stats_counts.counts.max(),
     baseline_counts.counts.max(),
@@ -398,4 +399,91 @@ logging.info(f"Saved results to: combined_analysis.csv")
 logging.info(f"Finished running {Path(__file__).name}")
 logging.info(f"<>" * 40)
 
+
+# %%
+post_processing = False
+if post_processing:
+    df = pd.read_csv(
+        [f for f in (MODELING_DIR / "regression_analysis").rglob("*.csv")][0]
+    )
+    df["alpha"] = 1.0
+    df_expanded = df.loc[df.index.repeat(df["counts"])].reset_index(drop=True)
+
+    summary_stats = {}
+    for d in df_expanded.name.unique():
+        cur_df = df_expanded[df_expanded["name"] == d]
+
+        r2_mean = str(cur_df.rsquared.mean().round(3)).ljust(5, "0")
+        r2_std = str(cur_df.rsquared.std().round(3)).ljust(5, "0")
+        num_feats_mean = str(cur_df.num_real_nonzeros.mean().round(3)).ljust(5, "0")
+        num_feats_std = str(cur_df.num_real_nonzeros.std().round(3)).ljust(5, "0")
+
+        r2_str = r"$R^2$"
+        summary_stats[d] = (
+            f"{d} ({r2_str} = {r2_mean} ± {r2_std}, N = {num_feats_mean} ± {num_feats_std})"
+        )
+
+    summary_stats
+
+    def combined_relplot(df, max_counts):
+        fig, ax = plt.subplots(figsize=(19.2, 14.4))
+
+        legend_handles = []
+        for p in df["palette"].unique():
+            cur_df = df[df["palette"] == p]
+            cur_name = summary_stats[cur_df.name.unique()[0]]
+            cur_alpha = cur_df.alpha.unique()[0]
+            cur_max = cur_df.max_marker_size.unique()[0]
+            sns.scatterplot(
+                data=cur_df,
+                x="rsquared",
+                y="num_real_nonzeros",
+                hue="counts",
+                hue_norm=mpl.colors.LogNorm(vmin=1, vmax=max_counts),
+                size="counts",
+                edgecolor=plt.get_cmap(p)(0.5),
+                alpha=cur_alpha,
+                palette=p,
+                sizes=(50, cur_max),  # 8000
+                legend=False,
+                ax=ax,
+            )
+            color1 = plt.get_cmap(p)(0.75)
+            color2 = plt.get_cmap(p)(0.5)
+            proxy = plt.Line2D(
+                [0],
+                [0],
+                marker="o",
+                linestyle="",
+                markersize=30,
+                markeredgewidth=2,
+                markerfacecolor=color1,
+                markeredgecolor=color2,
+                alpha=cur_alpha,
+                label=cur_name,
+            )
+            legend_handles.append(proxy)
+
+        ax.legend(
+            handles=[legend_handles[1], legend_handles[0], legend_handles[2]],
+            title="Dependent feature set",
+            title_fontsize=FONT_SIZE,
+            loc="best",
+        )
+
+        ax.invert_xaxis()
+        ax.invert_yaxis()
+
+        ax.xaxis.grid(True, which="minor", linewidth=0.25)
+        ax.yaxis.grid(True, which="minor", linewidth=0.25)
+
+        sns.despine(ax=ax, left=True, bottom=True)
+
+        ax.set_yticks([1, 5, 10, 15, 20, 25, 30, 35, 40])
+        ax.set_ylim(41, -1.5)
+        ax.set_xlabel(r"$R^2$ of reconstruction")
+        ax.set_ylabel(r"Num PyRadiomics predictors used in reconstruction (N)")
+
+    combined_relplot(df, df.counts.max())
+    single_relplot(df)
 # %%
