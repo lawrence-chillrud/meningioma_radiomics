@@ -48,7 +48,9 @@ from src.utils import PYRAD_FILE, LABELS_FILE, METADATA_FILE, MODELING_DIR, get_
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = (
+    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None if PREDICTION_TASK != "MethylationSubgroup" else 0.2
 MAX_WORKERS = 16
@@ -197,6 +199,12 @@ def test_job(test_idx, test_lambda):
     y_probs = model.predict_proba(X_test)
     test_loss = log_loss(y_test, y_probs, labels=np.unique(y))
 
+    intercept = (
+        model.intercept_
+        if PREDICTION_TASK == "MethylationSubgroup"
+        else model.intercept_.item()
+    )
+
     return dict(
         test_idx=test_idx,
         test_lambda=test_lambda,
@@ -205,7 +213,7 @@ def test_job(test_idx, test_lambda):
         y_probs=y_probs,
         y_pred=y_probs.argmax(),
         coefs=model.coef_,
-        intercept=model.intercept_,
+        intercept=intercept,
     )
 
 

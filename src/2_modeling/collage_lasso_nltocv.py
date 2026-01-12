@@ -234,6 +234,12 @@ def test_job(test_idx):
     y_probs = model.predict_proba(X_test)
     test_loss = log_loss(y_test, y_probs, labels=np.unique(y))
 
+    intercept = (
+        model.intercept_
+        if PREDICTION_TASK == "MethylationSubgroup"
+        else model.intercept_.item()
+    )
+
     return dict(
         test_idx=test_idx,
         test_lambda=test_lambda,
@@ -242,7 +248,7 @@ def test_job(test_idx):
         y_probs=y_probs,
         y_pred=y_probs.argmax(),
         coefs=model.coef_,
-        intercept=model.intercept_,
+        intercept=intercept,
     )
 
 
