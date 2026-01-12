@@ -245,9 +245,11 @@ def visualize_features(
             fig.suptitle(deets_str, y=0.98)
             if save:
                 plt.savefig(output_fp, dpi=dpi, bbox_inches="tight")
+                plt.close()
             else:
                 # plt.tight_layout()
                 plt.show()
+                plt.close()
         except KeyError:
             logging.exception(
                 f"Error for task={task}, pred_type={pred_type}, subject={c_subject}"
