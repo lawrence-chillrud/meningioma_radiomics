@@ -57,7 +57,7 @@ logging.info(f"\tCOLLAGE_FILE: {COLLAGE_FILE}")
 logging.info(f"\tPYRAD_FILE: {PYRAD_FILE}")
 logging.info(f"\tLABELS_FILE: {LABELS_FILE}")
 
-# Read in collage features, labels, and subject ID numbers
+# %% Read in collage features, labels, and subject ID numbers
 collage_df, y_c, subs_c = get_feats(
     prediction_task=PREDICTION_TASK,
     features_path=COLLAGE_FILE,  # "/Users/lgc2035/Documents/research/Meningioma_project/backups/09-25-2025/Meningioma/data/collage_sparse_small_windows/windowsize-5_binsize-32_summary_22nansfilled.csv", # COLLAGE_FEATURES_PATHS[-3],
@@ -177,7 +177,7 @@ stats_counts = (
     .size()
     .reset_index(name="counts")
 )
-logging.info(f"Step 1/3: Completed analysis for: CoLlAGe ~ PyRadiomics")
+logging.info(f"Step 1/4: Completed analysis for: CoLlAGe ~ PyRadiomics")
 
 # %% baseline regression analysis using radiomics features as BOTH predictors and outcomes, to see how Lasso behaves
 (
@@ -198,7 +198,31 @@ baseline_counts = (
     .size()
     .reset_index(name="counts")
 )
-logging.info(f"Step 2/3: Completed analysis for: PyRadiomics ~ PyRadiomics")
+logging.info(f"Step 2/4: Completed analysis for: PyRadiomics ~ PyRadiomics")
+
+# %% baseline regression analysis using radiomics features as BOTH predictors and outcomes, to see how Lasso behaves
+(
+    perm_rsquareds,
+    perm_num_nonzeros,
+    perm_num_real_nonzeros,
+    perm_iters,
+) = regression_analysis(
+    predictors_df=radiomics_df,
+    outcomes_df=radiomics_df.sample(frac=1).reset_index(drop=True),
+)
+perm_stats_df = pd.DataFrame(
+    {
+        "rsquared": np.array(perm_rsquareds).round(2),
+        "num_nonzeros": perm_num_nonzeros,
+        "num_real_nonzeros": perm_num_real_nonzeros,
+    }
+).sort_values(by=["rsquared", "num_real_nonzeros"], ascending=[False, True])
+perm_counts = (
+    perm_stats_df.groupby(["rsquared", "num_real_nonzeros"])
+    .size()
+    .reset_index(name="counts")
+)
+logging.info(f"Step 3/4: Completed analysis for: Perm PyRadiomics ~ PyRadiomics")
 
 # %% noise regression analysis using radx feats as predictors, noise as outcome
 noise_rsquareds, noise_num_nonzeros, noise_num_real_nonzeros, noise_iters = (
@@ -216,7 +240,7 @@ noise_counts = (
     .size()
     .reset_index(name="counts")
 )
-logging.info(f"Step 3/3: Completed analysis for: Random Noise ~ PyRadiomics")
+logging.info(f"Step 4/4: Completed analysis for: Random Noise ~ PyRadiomics")
 
 # %%
 FONT_SIZE = 32
@@ -371,34 +395,69 @@ all_counts = [
     stats_counts.counts.max(),
     baseline_counts.counts.max(),
     noise_counts.counts.max(),
+    perm_counts.counts.max(),
 ]
+
+r2_str = r"$R^2$"
 
 noise_counts["palette"] = "Greens"
 noise_counts["name"] = "Random noise"
-noise_counts["alpha"] = 0.5
+noise_counts["alpha"] = 1.0
 noise_counts["max_marker_size"] = all_counts[2] / max(all_counts) * 8_000
+noise_r2_mean = str(noise_stats_df.rsquared.mean().round(3)).ljust(5, "0")
+noise_r2_std = str(noise_stats_df.rsquared.std().round(3)).ljust(5, "0")
+noise_n_mean = str(noise_stats_df.num_real_nonzeros.mean().round(3)).ljust(5, "0")
+noise_n_std = str(noise_stats_df.num_real_nonzeros.std().round(3)).ljust(5, "0")
+noise_counts["full_name"] = (
+    f"Random noise ({r2_str} = {noise_r2_mean} ± {noise_r2_std}, N = {noise_n_mean} ± {noise_n_std})"
+)
+
+perm_counts["palette"] = "Greens"
+perm_counts["name"] = "Permutated PyRadiomics"
+perm_counts["alpha"] = 1.0
+perm_counts["max_marker_size"] = all_counts[3] / max(all_counts) * 8_000
+perm_r2_mean = str(perm_stats_df.rsquared.mean().round(3)).ljust(5, "0")
+perm_r2_std = str(perm_stats_df.rsquared.std().round(3)).ljust(5, "0")
+perm_n_mean = str(perm_stats_df.num_real_nonzeros.mean().round(3)).ljust(5, "0")
+perm_n_std = str(perm_stats_df.num_real_nonzeros.std().round(3)).ljust(5, "0")
+perm_counts["full_name"] = (
+    f"Permutated PyRadiomics ({r2_str} = {perm_r2_mean} ± {perm_r2_std}, N = {perm_n_mean} ± {perm_n_std})"
+)
 
 baseline_counts["palette"] = "Blues"
 baseline_counts["name"] = "PyRadiomics"
-baseline_counts["alpha"] = 0.5
+baseline_counts["alpha"] = 1.0
 baseline_counts["max_marker_size"] = all_counts[1] / max(all_counts) * 8_000
+baseline_r2_mean = str(baseline_stats_df.rsquared.mean().round(3)).ljust(5, "0")
+baseline_r2_std = str(baseline_stats_df.rsquared.std().round(3)).ljust(5, "0")
+baseline_n_mean = str(baseline_stats_df.num_real_nonzeros.mean().round(3)).ljust(5, "0")
+baseline_n_std = str(baseline_stats_df.num_real_nonzeros.std().round(3)).ljust(5, "0")
+baseline_counts["full_name"] = (
+    f"PyRadiomics ({r2_str} = {baseline_r2_mean} ± {baseline_r2_std}, N = {baseline_n_mean} ± {baseline_n_std})"
+)
 
 stats_counts["palette"] = "Oranges"
 stats_counts["name"] = "CoLlAGe"
 stats_counts["alpha"] = 1.0
 stats_counts["max_marker_size"] = all_counts[0] / max(all_counts) * 8_000
+stats_r2_mean = str(stats_df.rsquared.mean().round(3)).ljust(5, "0")
+stats_r2_std = str(stats_df.rsquared.std().round(3)).ljust(5, "0")
+stats_n_mean = str(stats_df.num_real_nonzeros.mean().round(3)).ljust(5, "0")
+stats_n_std = str(stats_df.num_real_nonzeros.std().round(3)).ljust(5, "0")
+stats_counts["full_name"] = (
+    f"PyRadiomics ({r2_str} = {stats_r2_mean} ± {stats_r2_std}, N = {stats_n_mean} ± {stats_n_std})"
+)
 
-combined_df = pd.concat([stats_counts, baseline_counts, noise_counts])
+combined_df = pd.concat([stats_counts, baseline_counts, perm_counts, noise_counts])
 combined_df["num_real_nonzeros"] = combined_df["num_real_nonzeros"] + 1
-# combined_relplot(combined_df, max_counts=max(all_counts)) # 'Regressing different datasets on PyRadiomics features'
-# single_relplot(combined_df)
+# combined_relplot(combined_df[combined_df["name"] != "Random noise"], max_counts=max(all_counts)) # 'Regressing different datasets on PyRadiomics features'
+# single_relplot(combined_df[combined_df["name"] != "Random noise"])
 
 # %%
 combined_df.to_csv(OUTPUT_DIR / "combined_analysis.csv")
 logging.info(f"Saved results to: combined_analysis.csv")
 logging.info(f"Finished running {Path(__file__).name}")
 logging.info(f"<>" * 40)
-
 
 # %%
 post_processing = False
