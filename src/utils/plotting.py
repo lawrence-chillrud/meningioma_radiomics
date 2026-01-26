@@ -18,7 +18,7 @@ from sklearn.metrics import (
     roc_curve,
 )
 from sklearn.preprocessing import label_binarize
-
+from imblearn.metrics import specificity_score
 from .get_segs import get_segs_roi_key
 
 FONT_SIZE = 14
@@ -39,11 +39,15 @@ mpl.rcParams.update(
 def shorten_feat_name(orig_name):
     short_name = orig_name
     d = {
+        "Maximum3DDiameter": "Max3DDiam",
+        "Maximum2DDiameterSlice": "MaxSagittalDiam",
+        "Maximum2DDiameterColumn": "MaxCoronalDiam",
+        "Maximum2DDiameterRow": "MaxAxialDiam",
         "Maximum": "Max",
         "Minimum": "Min",
         "InterquartileRange": "IQR",
         "2D": "",
-        "3D": "",
+        # "3D": "",
         "Diameter": "Diam",
         "Small": "Sm",
         "Large": "Lg",
@@ -393,6 +397,9 @@ def plot_multiclass_results(probs, y_true, class_ids, prediction_task, plot=Fals
         "Weighted Recall (Sensitivity)": recall_score(
             y_true, y_pred, average="weighted"
         ),
+        "Macro Specificity": specificity_score(y_true, y_pred, average="macro"),
+        "Micro Specificity": specificity_score(y_true, y_pred, average="micro"),
+        "Weighted Specificity": specificity_score(y_true, y_pred, average="weighted"),
         "Accuracy": accuracy_score(y_true, y_pred),
         "Balanced Accuracy": balanced_accuracy_score(y_true, y_pred),
         "MCC": matthews_corrcoef(y_true, y_pred),
