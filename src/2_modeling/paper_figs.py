@@ -11,21 +11,20 @@ from matplotlib.patches import Rectangle
 from matplotlib.lines import Line2D
 from matplotlib.legend_handler import HandlerBase
 import seaborn as sns
+from pathlib import Path
 
 from src.utils.plotting import *
 from src.utils import MODELING_DIR, get_feats
 
-# %% User defined variables to select proper experiment
-PREDICTION_TASK = (
-    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
-)
+# User defined variables to select proper experiment
+PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 FEATURE_SET = "pyradiomics"  # can be one of "pyradiomics" or "collage"
 EXP_DIRS = [
     d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()
 ]
 EXP_DIR = EXP_DIRS[-1]
 
-# %% Read in all experiment metadata and results
+# Read in all experiment metadata and results
 run_metadata_df = pd.read_csv(EXP_DIR / "run_metadata_df.csv")
 SCALER = run_metadata_df["SCALER"].values[0]
 LOW_VAR_THRESH = (
@@ -35,14 +34,30 @@ LOW_VAR_THRESH = (
 )
 LAMBDAS = np.fromstring(run_metadata_df["LAMBDAS"].values[0].strip("[]"), sep=" ")
 LR_PARAMS = run_metadata_df["LR_PARAMS"].values[0]
-PYRAD_FILE = run_metadata_df["PYRAD_FILE"].values[0]
+if FEATURE_SET == "pyradiomics":
+    PYRAD_FILE = run_metadata_df["PYRAD_FILE"].values[0]
+else:
+    COLLAGE_DIR = Path(run_metadata_df["COLLAGE_DIR"].values[0])
 LABELS_FILE = run_metadata_df["LABELS_FILE"].values[0]
 METADATA_FILE = run_metadata_df["METADATA_FILE"].values[0]
 
 best_lambdas = pd.read_csv(EXP_DIR / "best_lambdas.csv")
-best_lambdas_counts = pd.read_csv(EXP_DIR / "best_lambdas_counts.csv")
+mean_best_lambda = best_lambdas["lambda_i"].mean()
+print("PREDICTION TASK: ", PREDICTION_TASK)
+print("Mean best lambda: ", mean_best_lambda)
+if FEATURE_SET == "collage":
+    print("Mean best win_size: ", best_lambdas["win_size"].mean())
+    print("Mean best bin_size: ", best_lambdas["bin_size"].mean())
+
+subset = (
+    ["lambda_i", "win_size", "bin_size"] if (FEATURE_SET == "collage") else ["lambda_i"]
+)
+best_lambdas_counts = best_lambdas.value_counts(subset=subset)
+print(best_lambdas_counts)
 val_loop = pd.read_csv(EXP_DIR / "validation_loop.csv")
 test_loop = pd.read_csv(EXP_DIR / "testing_loop.csv")
+
+# %%
 test_metrics = pd.read_csv(EXP_DIR / "testing_metrics.csv")
 coefs = {}
 if PREDICTION_TASK != "MethylationSubgroup":
@@ -55,13 +70,31 @@ else:
 
 # %% Read in data needed for plotting
 metadata_df = pd.read_csv(METADATA_FILE)
-X, y, SUBJECTS = get_feats(
-    prediction_task=PREDICTION_TASK,
-    features_path=PYRAD_FILE,
-    labels_path=LABELS_FILE,
-    scaler=SCALER,
-    low_var_thresh=LOW_VAR_THRESH,
-)
+
+if FEATURE_SET == "pyradiomics":
+    X, y, SUBJECTS = get_feats(
+        prediction_task=PREDICTION_TASK,
+        features_path=PYRAD_FILE,
+        labels_path=LABELS_FILE,
+        scaler=SCALER,
+        low_var_thresh=LOW_VAR_THRESH,
+    )
+else:
+    win_size = best_lambdas_counts.index[0][1]
+    bin_size = best_lambdas_counts.index[0][2]
+    features_path = [
+        f
+        for f in COLLAGE_DIR.rglob(
+            f"*wide-features-collage_win-{win_size}_bin-{bin_size}.csv"
+        )
+    ][0]
+    X, y, SUBJECTS = get_feats(
+        prediction_task=PREDICTION_TASK,
+        features_path=features_path,
+        labels_path=LABELS_FILE,
+        scaler=SCALER,
+        low_var_thresh=LOW_VAR_THRESH,
+    )
 
 N = len(X)
 N_CLASSES = len(set(y))
@@ -237,6 +270,15 @@ else:
 # %% Feature importances
 for c in coefs:
     print(f"BEGINNING PLOTS FOR: {c}")
+    print("TOTAL NUM FEATS: ", len(coefs[c]))
+    print(
+        f"Num features needed to explain >= 0.95 var in model coef: ",
+        sum((coefs[c]["Cum Var Exp"] < 0.95).values) + 1,
+    )
+    print(
+        "Variance explained by top 10 feats: ",
+        round(coefs[c].iloc[:10]["Cum Var Exp"].values[-1], 3),
+    )
     most_robust_feats_df = coefs[c].iloc[:5]
 
     # Heatmap
@@ -284,3 +326,84 @@ for c in coefs:
 # print("INCORRECT SESSIONS:\n", pd.Series(incorrect_sessions).value_counts())
 
 # print("TOTAL SESSIONS:\n", pd.Series(sessions.values()).value_counts())
+
+# %%
+# THIS CODE IS SIMPLY TO CHECK WHETHER SHAPE FEATS CORRESPOND TO AXIAL, SAGITTAL, OR CORONAL PLANES!!
+
+# import os
+# import sys
+
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+# from src.utils import PYRAD_FILE
+# from src.utils import (
+#     get_mris,
+#     get_segs,
+#     get_feats,
+#     clean_feature_names,
+#     translate_feat_names,
+# )
+# import SimpleITK as sitk
+# import matplotlib.pyplot as plt
+# import numpy as np
+# import cv2
+
+# X, y, SUBJECTS = get_feats(
+#     prediction_task="Chr22q",
+#     features_path=PYRAD_FILE,
+#     scaler="None",
+# )
+# X.columns = translate_feat_names(clean_feature_names(X.columns))
+# X["subject"] = SUBJECTS
+# to_check = X[
+#     [
+#         "subject",
+#         "Tmr MaxAxialDiam on T1",
+#         "Tmr MaxSagittalDiam on T1",
+#         "Tmr MaxCoronalDiam on T1",
+#     ]
+# ].sort_values(by=["Tmr MaxAxialDiam on T1"], ascending=[False])
+
+
+# def rescale_linear(array: np.ndarray, new_min: int, new_max: int):
+#     """Rescale an array linearly."""
+#     minimum, maximum = np.min(array), np.max(array)
+#     m = (new_max - new_min) / (maximum - minimum)
+#     b = new_min - m * minimum
+#     return m * array + b
+
+
+# %%
+# subject = 85
+
+# mris = get_mris(subject)
+# im = sitk.ReadImage(mris["T1_POST"])
+# im_arr = sitk.GetArrayFromImage(im)
+
+# seg = sitk.GetArrayFromImage(get_segs(subject, with_sitk=True, rois=3)[3])
+
+# # axis 0 is sagittal
+# # axis 1 is coronal
+# # axis 2 is axial
+# views = ["sagittal", "coronal", "axial"]
+# for i in range(3):
+#     cancerous_pixels_per_slice = np.sum(seg, axis=tuple(set([0, 1, 2]) - set([i])))
+#     cslice = np.argmax(cancerous_pixels_per_slice)
+
+#     mri_slice = np.take(im_arr, indices=cslice, axis=i)
+#     seg_slice = np.take(seg, indices=cslice, axis=i)
+
+#     mri_rescaled = rescale_linear(mri_slice, 0, 1)
+#     seg_rescaled = rescale_linear(seg_slice, 0, 1).astype(np.uint8)
+
+#     arr_rgb = cv2.cvtColor(mri_rescaled, cv2.COLOR_GRAY2RGB)
+#     contours, _ = cv2.findContours(seg_rescaled, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+#     arr_with_contours = cv2.drawContours(arr_rgb, contours, -1, (0, 1, 0), 1)
+
+#     plt.imshow(arr_with_contours)
+#     plt.title(f"{views[i]}: {np.max(cancerous_pixels_per_slice)}")
+#     plt.show()
+#     plt.close()
+
+# %%
