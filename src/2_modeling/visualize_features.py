@@ -28,8 +28,8 @@ from src.utils import (
 )
 
 RESULTS_DIR = MODELING_DIR / "pyradiomics"
-NUM_TOP_FEATS = 5
-NUM_CANDIDATES = 10
+NUM_TOP_FEATS = 4
+NUM_CANDIDATES = 20
 
 # Output dir and logfile set up
 TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
@@ -57,10 +57,17 @@ logging.info(f"\ttesting_loop_files: {testing_loop_files}")
 logging.info(f"\tMETADATA_FILE: {METADATA_FILE}")
 
 # Read in coefs files
-coefs = {}
+coefs = {
+    "MethylationSubgroup": {
+        "Merlin Intact": {},
+        "Immune Enriched": {},
+        "Hypermetabolic": {},
+    },
+    "Chr1p": None,
+    "Chr22q": None,
+}
 for f in coef_files:
     prediction_task = str(f).split("/")[-3]
-    coefs[prediction_task] = {}
     if prediction_task == "MethylationSubgroup":
         subtask = str(f).split("/")[-1].replace("_coefs.csv", "")
         coefs[prediction_task][subtask] = pd.read_csv(f, index_col=[0])
@@ -100,20 +107,20 @@ for k in ["Chr22q", "Chr1p"]:
 
 # Find top correct, incorrect candidate subjects for MethylationSubgroup sub tasks
 top_candidates["MethylationSubgroup"] = {}
-for y in [0, 1, 2]:
-    top_candidates["MethylationSubgroup"][y] = {}
+for y, subtask in enumerate(["Merlin Intact", "Immune Enriched", "Hypermetabolic"]):
+    top_candidates["MethylationSubgroup"][subtask] = {}
     df = test_loops["MethylationSubgroup"]
     df_filter = df[df["y_true"] == y].sort_values(by="test_loss", ascending=True)
-    top_candidates["MethylationSubgroup"][y]["correct"] = (
+    top_candidates["MethylationSubgroup"][subtask]["correct"] = (
         df_filter[df_filter["y_pred"] == y]
-        .head()[
+        .head(NUM_CANDIDATES)[
             ["Subject Number", "test_idx", "y_probs", "y_pred", "y_true", "test_loss"]
         ]
         .reset_index(drop=True)
     )
-    top_candidates["MethylationSubgroup"][y]["incorrect"] = (
+    top_candidates["MethylationSubgroup"][subtask]["incorrect"] = (
         df_filter[df_filter["y_pred"] != y]
-        .tail()
+        .tail(NUM_CANDIDATES)
         .sort_values(by="test_loss", ascending=False)[
             ["Subject Number", "test_idx", "y_probs", "y_pred", "y_true", "test_loss"]
         ]
@@ -185,8 +192,6 @@ def visualize_features(
     task="Chr22q", pred_type="TP", num_feats=NUM_TOP_FEATS, dpi=300, save=True
 ):
     class_ids = ["Intact", "Lost"]
-    if task == "MethylationSubgroup":
-        class_ids = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
 
     for i in tqdm(
         range(len(top_candidates[task][pred_type])),
@@ -256,6 +261,82 @@ def visualize_features(
             )
 
 
+def visualize_methylation_features(
+    pred_type="correct", num_feats=NUM_TOP_FEATS, dpi=300, save=True
+):
+    top_candidates_df = top_candidates["MethylationSubgroup"]
+    coefs_df = coefs["MethylationSubgroup"]
+    class_ids = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
+    for c in tqdm(
+        class_ids, total=3, desc="Subtype loop", position=1, leave=False, ncols=120
+    ):
+        for i in tqdm(
+            range(len(top_candidates_df[c][pred_type])),
+            total=len(top_candidates_df[c][pred_type]),
+            desc="Inner loop",
+            position=2,
+            leave=False,
+            ncols=120,
+        ):
+            try:
+                output_fp = OUTPUT_DIR / f"{c}_{pred_type}-{i}.png"
+                if save and output_fp.exists():
+                    continue
+                c_tc = top_candidates_df[c][pred_type].iloc[i]
+                c_subject = c_tc["Subject Number"].astype(int)
+                c_test_fold_num = c_tc["test_idx"].astype(int).item() + 1
+                c_y_pred = c_tc["y_pred"].astype(int)
+                c_y_true = c_tc["y_true"].astype(int)
+                c_coefs = coefs_df[c][f"Test fold {c_test_fold_num}"]
+                c_feats = clean_feature_names(c_coefs.index.values)
+                c_betas = c_coefs.values
+                X, _, sub_nos = get_feats(
+                    prediction_task="MethylationSubgroup",
+                    features_path=PYRAD_FILE,
+                )
+                X["subject"] = sub_nos
+                X.index = X["subject"]
+                c_image_feat_vals = X.loc[c_subject][c_feats]
+                c_df = pd.DataFrame(
+                    {
+                        "subject": c_subject,
+                        "feat": c_feats,
+                        "beta": c_betas,
+                        "x": c_image_feat_vals,
+                    }
+                )
+                c_df["betax"] = c_df["beta"] * c_df["x"]
+                c_df["contribution"] = c_df["betax"].abs() / c_df["betax"].abs().sum()
+                c_df["feat_clean"] = translate_feat_names(c_df["feat"])
+                c_top_feats = c_df.head(num_feats)
+
+                fig, axes = plt.subplots(
+                    1, num_feats, figsize=(20 * num_feats, 20), dpi=dpi, squeeze=False
+                )
+
+                for j, ax in enumerate(axes[0]):
+                    make_thumbnail(c_top_feats.iloc[j], ax)
+
+                subject_details = metadata_df.loc[c_subject]
+                sex = subject_details.Sex
+                age = subject_details.Age
+                ethnicity = subject_details.Ethnicity
+                eth = f", {ethnicity}" if isinstance(ethnicity, str) else ""
+                deets_str = f"Subject {c_subject} [{sex}{age}{eth}], Methylation Subgroup: {class_ids[c_y_true]} ({float(c_y_true)}), Predicted: {class_ids[c_y_pred]} ({float(c_y_pred)})"
+                fig.suptitle(deets_str, y=0.98)
+                if save:
+                    plt.savefig(output_fp, dpi=dpi, bbox_inches="tight")
+                    plt.close()
+                else:
+                    # plt.tight_layout()
+                    plt.show()
+                    plt.close()
+            except KeyError:
+                logging.exception(
+                    f"Error for task={c}, pred_type={pred_type}, subject={c_subject}"
+                )
+
+
 # %%
 FONT_SIZE = 32
 mpl.rcParams.update(
@@ -268,16 +349,28 @@ mpl.rcParams.update(
     }
 )
 
-tasks = ["Chr22q", "Chr1p"]  # ["Chr1p"] or ["Chr22q", "Chr1p"]
-pred_types = ["TP", "TN", "FP", "FN"]
-for t, p in tqdm(
-    product(tasks, pred_types),
-    total=(len(tasks) * len(pred_types)),
+# MethylationSubgroup images
+pred_types = ["correct", "incorrect"]
+for p in tqdm(
+    pred_types,
+    total=len(pred_types),
     desc="Outer loop",
     position=0,
     ncols=120,
 ):
-    visualize_features(t, p)
+    visualize_methylation_features(p)
+
+
+# tasks = ["Chr22q", "Chr1p"]
+# pred_types = ["TP", "TN", "FP", "FN"]
+# for t, p in tqdm(
+#     product(tasks, pred_types),
+#     total=(len(tasks) * len(pred_types)),
+#     desc="Outer loop",
+#     position=0,
+#     ncols=120,
+# ):
+#     visualize_features(t, p)
 
 logging.info(f"Saved results to: {OUTPUT_DIR}")
 logging.info(f"Finished running {Path(__file__).name}")
