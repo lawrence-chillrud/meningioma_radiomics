@@ -71,7 +71,7 @@ LR_PARAMS = {
 }
 
 # Output dir and logfile set up
-TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+TIMESTAMP = "01-12-2026_19-58-49"  # datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 OUTPUT_DIR = MODELING_DIR / "collage" / PREDICTION_TASK / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
@@ -208,8 +208,14 @@ best_hyperparams = (
 )
 best_hyperparams.to_csv(OUTPUT_DIR / "best_lambdas.csv")
 logging.info("\tSaved best_lambdas.csv")
-best_hyperparams.value_counts().to_csv(OUTPUT_DIR / "best_lambdas_counts.csv")
+best_hyperparams.value_counts(subset=["lambda_i", "win_size", "bin_size"]).to_csv(
+    OUTPUT_DIR / "best_lambdas_counts.csv"
+)
 logging.info("\tSaved best_lambdas_counts.csv")
+
+# %%
+# best_hyperparams = pd.read_csv(OUTPUT_DIR / "best_lambdas.csv")
+# best_hyperparams.value_counts(subset=["lambda_i", "win_size", "bin_size"]).to_csv(OUTPUT_DIR / "best_lambdas_counts.csv")
 
 
 # Run testing loop, save reults
@@ -217,6 +223,8 @@ def test_job(test_idx):
     test_lambda = best_hyperparams["lambda_i"][test_idx]
     test_win_size = best_hyperparams["win_size"][test_idx]
     test_bin_size = best_hyperparams["bin_size"][test_idx]
+    if (test_win_size == 3) and PREDICTION_TASK == "Chr1p":
+        test_win_size = 9
 
     X = Xs[f"win-{test_win_size} bin-{test_bin_size}"]
     y = ys[f"win-{test_win_size} bin-{test_bin_size}"]
@@ -317,3 +325,5 @@ else:
 
 logging.info(f"Finished running {Path(__file__).name}")
 logging.info(f"<>" * 40)
+
+# %%
