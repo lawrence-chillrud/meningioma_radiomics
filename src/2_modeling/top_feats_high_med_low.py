@@ -26,6 +26,7 @@ from src.utils import (
     translate_feat_names,
     clean_feature_names,
 )
+# %%
 
 RESULTS_DIR = MODELING_DIR / "pyradiomics"
 NUM_TOP_FEATS = 5
@@ -81,7 +82,7 @@ viable_idxs = X[top_feats[0]].loc[X[top_feats[0]] != 0].index
 X, y, SUBJECTS = get_feats(
     prediction_task="Chr22q",
     features_path=PYRAD_FILE,
-    scaler="Standard",
+    scaler=None,
 )
 x_vals = X.iloc[viable_idxs][top_feats[0]].round(3).values
 subs = SUBJECTS[viable_idxs]
@@ -197,7 +198,16 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
             .sort_values(by="x", ascending=False)
             .reset_index(drop=True)
         )
-        to_plot = cur_df.iloc[[0, len(cur_df) // 2, -1]].reset_index(drop=True)
+        mid = 0.5
+        # if i == 0:
+        #     mid = 0.45
+        # else:
+        #     mid = 0.5
+        to_plot = cur_df.iloc[[
+            int(len(cur_df) * 0.1), 
+            int(len(cur_df) * mid),
+            int(len(cur_df) * 0.9)
+        ]].reset_index(drop=True)
 
         for j in range(len(to_plot)):
             make_thumbnail(to_plot.iloc[j], axes[j, i])
@@ -223,12 +233,12 @@ mpl.rcParams.update(
     }
 )
 
-for k in coefs.keys():
-    visualize_feature_key(task=k)
-# %%
+for k in coefs.keys(): # or ['Chr22q']:
+    visualize_feature_key(task=k, save=True)
 
 logging.info(f"Saved results to: {OUTPUT_DIR}")
 logging.info(f"Finished running {Path(__file__).name}")
 logging.info(f"<>" * 40)
 print(f"✅ Finished running. Saved results to: {OUTPUT_DIR}")
+
 # %%

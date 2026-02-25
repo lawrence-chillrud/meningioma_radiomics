@@ -17,12 +17,12 @@ from src.utils.plotting import *
 from src.utils import MODELING_DIR, get_feats
 
 # User defined variables to select proper experiment
-PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 FEATURE_SET = "pyradiomics"  # can be one of "pyradiomics" or "collage"
-EXP_DIRS = [
+EXP_DIRS = sorted([
     d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()
-]
-EXP_DIR = EXP_DIRS[-1]
+])
+EXP_DIR = EXP_DIRS[-4] # -7 to -1
 
 # Read in all experiment metadata and results
 run_metadata_df = pd.read_csv(EXP_DIR / "run_metadata_df.csv")
@@ -30,6 +30,11 @@ SCALER = run_metadata_df["SCALER"].values[0]
 LOW_VAR_THRESH = (
     run_metadata_df["LOW_VAR_THRESH"].values[0]
     if not run_metadata_df["LOW_VAR_THRESH"].isna().values[0]
+    else None
+)
+CORRELATED_FEATS_THRESH = (
+    run_metadata_df["CORRELATED_FEATS_THRESH"].values[0]
+    if not run_metadata_df["CORRELATED_FEATS_THRESH"].isna().values[0]
     else None
 )
 LAMBDAS = np.fromstring(run_metadata_df["LAMBDAS"].values[0].strip("[]"), sep=" ")
@@ -78,6 +83,7 @@ if FEATURE_SET == "pyradiomics":
         labels_path=LABELS_FILE,
         scaler=SCALER,
         low_var_thresh=LOW_VAR_THRESH,
+        remove_correlated_feats=CORRELATED_FEATS_THRESH,
     )
 else:
     win_size = best_lambdas_counts.index[0][1]
@@ -94,6 +100,7 @@ else:
         labels_path=LABELS_FILE,
         scaler=SCALER,
         low_var_thresh=LOW_VAR_THRESH,
+        remove_correlated_feats=CORRELATED_FEATS_THRESH,
     )
 
 N = len(X)
@@ -244,7 +251,7 @@ for color, split in zip(palette, splits):
     # Legend handle combines all three
     legend_handles.append((color, marker, 0.25))
 
-ax.set_xlabel("Inverse regularization strength (1/λ)")
+ax.set_xlabel("Inverse regularization strength (λ)")
 ax.set_ylabel("Log loss")
 ax.legend(
     legend_handles,
@@ -255,6 +262,9 @@ ax.legend(
 plt.show()
 plt.close()
 
+df_val_summary_agg[df_val_summary_agg["Dataset split"] == "Validation"].mean_loss.plot()
+min_val_loss = df_val_summary_agg[df_val_summary_agg["Dataset split"] == "Validation"].mean_loss.min()
+print(f"MIN AVG VAL LOSS FOR CORR FEAT THRESH {CORRELATED_FEATS_THRESH}: {min_val_loss}")
 # %% Metrics plots
 y_probs = np.vstack(
     [np.fromstring(x.strip("[]"), sep=" ") for x in test_loop["y_probs"].values]

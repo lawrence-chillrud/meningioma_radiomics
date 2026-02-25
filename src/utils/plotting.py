@@ -83,7 +83,10 @@ def translate_feat_names(names):
             readable_annotation = get_segs_roi_key()[
                 int(annotation)
             ]  # e.g. Enhancing tumor
-            new_names.append(f"{readable_annotation} {feat_name} on {pulse}")
+            if feat_type != "shape":
+                new_names.append(f"{readable_annotation} {feat_name} on {pulse}")
+            else:
+                new_names.append(f"{readable_annotation} {feat_name}")
 
     return new_names
 

@@ -39,6 +39,7 @@ import numpy as np
 from pathlib import Path
 import pandas as pd
 from joblib import Parallel, delayed
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 from tqdm import tqdm
@@ -53,9 +54,11 @@ from src.utils import (
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+print("Prediction task: ", PREDICTION_TASK)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
+CORRELATED_FEATS_THRESH = 0.5 # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
 MAX_WORKERS = 16
 FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
 HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
@@ -71,7 +74,7 @@ LR_PARAMS = {
 }
 
 # Output dir and logfile set up
-TIMESTAMP = "01-12-2026_19-58-49"  # datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
 OUTPUT_DIR = MODELING_DIR / "collage" / PREDICTION_TASK / TIMESTAMP
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
@@ -97,8 +100,9 @@ for f in tqdm(
         prediction_task=PREDICTION_TASK,
         features_path=f,
         labels_path=LABELS_FILE,
-        scaler=SCALER,
+        scaler="None",
         low_var_thresh=LOW_VAR_THRESH,
+        remove_correlated_feats=CORRELATED_FEATS_THRESH,
     )
 
 # Log run's metadata
@@ -107,6 +111,7 @@ run_metadata_df = pd.DataFrame(
         "PREDICTION_TASK": PREDICTION_TASK,
         "SCALER": SCALER,
         "LOW_VAR_THRESH": LOW_VAR_THRESH,
+        "CORRELATED_FEATS_THRESH": CORRELATED_FEATS_THRESH,
         "LAMBDAS": [LAMBDAS],
         "COLLAGE_DIR": COLLAGE_DIR,
         "LABELS_FILE": LABELS_FILE,
@@ -140,6 +145,19 @@ def val_job(test_idx, val_idx, lambda_i, win_size, bin_size):
     train_idx = [k for k in range(N) if k not in (test_idx, val_idx)]
     X_train, y_train = X.iloc[train_idx], y[train_idx]
     X_val, y_val = X.iloc[[val_idx]], [y[val_idx]]
+
+    # Scale data
+    if SCALER == "Standard":
+        scaler_obj = StandardScaler()
+    elif SCALER == "MinMax":
+        scaler_obj = MinMaxScaler()
+    else:
+        scaler_obj = None
+
+    if scaler_obj is not None:
+        scaler_obj = scaler_obj.fit(X_train)
+        X_train = pd.DataFrame(scaler_obj.transform(X_train), columns=X_train.columns)
+        X_val = pd.DataFrame(scaler_obj.transform(X_val), columns=X_val.columns)
 
     # Fit logistic LASSO regression
     model = LogisticRegression(C=lambda_i, **LR_PARAMS)
@@ -233,6 +251,19 @@ def test_job(test_idx):
     train_idx = [k for k in range(N) if k != test_idx]
     X_train, y_train = X.iloc[train_idx], y[train_idx]
     X_test, y_test = X.iloc[[test_idx]], [y[test_idx]]
+
+    # Scale data
+    if SCALER == "Standard":
+        scaler_obj = StandardScaler()
+    elif SCALER == "MinMax":
+        scaler_obj = MinMaxScaler()
+    else:
+        scaler_obj = None
+
+    if scaler_obj is not None:
+        scaler_obj = scaler_obj.fit(X_train)
+        X_train = pd.DataFrame(scaler_obj.transform(X_train), columns=X_train.columns)
+        X_test = pd.DataFrame(scaler_obj.transform(X_test), columns=X_test.columns)
 
     # Fit logistic LASSO regression
     model = LogisticRegression(C=test_lambda, **LR_PARAMS)
