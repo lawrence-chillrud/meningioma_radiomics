@@ -169,6 +169,8 @@ def get_feats(
         X = X.drop(columns=[f for f in X.columns if ("shape" in f) and ("T1" not in f)])
 
     if remove_correlated_feats:
+        if 'collage' in str(features_path).lower():
+            X = X[sorted(X.columns.to_list())]
         X = remove_correlated_features(X, threshold=remove_correlated_feats)
 
     return X, y, sub_nos

@@ -54,7 +54,7 @@ from src.utils import (
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
 print("Prediction task: ", PREDICTION_TASK)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
@@ -102,6 +102,7 @@ for f in tqdm(
         labels_path=LABELS_FILE,
         scaler="None",
         low_var_thresh=LOW_VAR_THRESH,
+        drop_extra_shape_feats=False,
         remove_correlated_feats=CORRELATED_FEATS_THRESH,
     )
 
@@ -241,8 +242,6 @@ def test_job(test_idx):
     test_lambda = best_hyperparams["lambda_i"][test_idx]
     test_win_size = best_hyperparams["win_size"][test_idx]
     test_bin_size = best_hyperparams["bin_size"][test_idx]
-    if (test_win_size == 3) and PREDICTION_TASK == "Chr1p":
-        test_win_size = 9
 
     X = Xs[f"win-{test_win_size} bin-{test_bin_size}"]
     y = ys[f"win-{test_win_size} bin-{test_bin_size}"]
@@ -299,8 +298,55 @@ outer_df = pd.DataFrame(outer_results)
 outer_df["Subject Number"] = SUBJECTS
 outer_df.to_csv(OUTPUT_DIR / "testing_loop.csv", index=False)
 logging.info("Step 2/2 complete. Testing loop results stored in: testing_loop.csv")
-test_coefs = np.stack(outer_df.coefs)
+# %%
+coefs_dict = {}
+if PREDICTION_TASK == "MethylationSubgroup":
+    for c in CLASS_IDS:
+        coefs_dict[c] = {}
 
+# First pass to initialize coef dir
+for i in range(len(outer_df)):
+    tidx = outer_df.iloc[i].test_idx
+    test_win_size = best_hyperparams["win_size"][tidx]
+    test_bin_size = best_hyperparams["bin_size"][tidx]
+    X = Xs[f"win-{test_win_size} bin-{test_bin_size}"]
+    for f in X.columns:
+        if PREDICTION_TASK == "MethylationSubgroup":
+            for c in CLASS_IDS:
+                coefs_dict[c][f] = []
+        else:
+            coefs_dict[f] = []
+
+# Second pass to populate coef dir
+for i in range(len(outer_df)):
+    tidx = outer_df.iloc[i].test_idx
+    test_win_size = best_hyperparams["win_size"][tidx]
+    test_bin_size = best_hyperparams["bin_size"][tidx]
+    X = Xs[f"win-{test_win_size} bin-{test_bin_size}"]
+    cur_coefs = outer_df.iloc[i].coefs.squeeze()
+    if PREDICTION_TASK == "MethylationSubgroup":
+        for i, c in enumerate(CLASS_IDS):
+            for f in coefs_dict[c]:
+                f_loc = np.where(X.columns == f)[0]
+                if f_loc.size:
+                    coefs_dict[c][f].append(cur_coefs[i, f_loc[0]])
+                else:
+                    coefs_dict[c][f].append(0.)
+    else:
+        for f in coefs_dict:
+            f_loc = np.where(X.columns == f)[0]
+            if f_loc.size:
+                coefs_dict[f].append(cur_coefs[f_loc[0]])
+            else:
+                coefs_dict[f].append(0.)
+
+if PREDICTION_TASK == "MethylationSubgroup":
+    current_coefs_dfs = []
+    for c in CLASS_IDS:
+        current_coefs_dfs.append(pd.DataFrame(coefs_dict[c]).T)
+else:
+    current_coefs_dfs = [pd.DataFrame(coefs_dict).T]
+# %%
 # Get test set performance metrics, save
 if N_CLASSES == 3:
     metrics = plot_multiclass_results(
@@ -313,46 +359,25 @@ pd.DataFrame(metrics, index=[0]).to_csv(OUTPUT_DIR / "testing_metrics.csv", inde
 logging.info("\tTesting metrics saved to: testing_metrics.csv")
 
 # Get coefs, save
-test_coefs = test_coefs.squeeze()
-if len(test_coefs.shape) == 3:
-    for c in range(test_coefs.shape[1]):
-        current_model = test_coefs[:, c, :]
-        nonzero_feats_idxs = np.nonzero(np.sum(current_model, axis=0))[0]
-        current_coefs = current_model[:, nonzero_feats_idxs]
-        current_coefs_df = pd.DataFrame(
-            current_coefs, columns=Xs["win-9 bin-64"].columns[nonzero_feats_idxs]
-        ).T
-        current_coefs_df.columns = [f"Test fold {i + 1}" for i in range(N)]
-        current_coefs_df["Absolute Sum"] = current_coefs_df.abs().sum(axis=1)
-        current_coefs_df = current_coefs_df.sort_values(
-            by="Absolute Sum", ascending=False
-        )
-        current_coefs_df["Prop Var Exp"] = (
-            current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
-        )
-        current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
-        current_coefs_df["Feature"] = current_coefs_df.index
-        current_coefs_df["Prediction task"] = CLASS_IDS[c]
-        current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[c]}_coefs.csv")
-        logging.info(f"\tSaved {CLASS_IDS[c]}_coefs.csv")
-
-else:
-    nonzero_feats_idxs = np.nonzero(np.sum(test_coefs, axis=0))[0]
-    current_coefs = test_coefs[:, nonzero_feats_idxs]
-    current_coefs_df = pd.DataFrame(
-        current_coefs, columns=Xs["win-9 bin-64"].columns[nonzero_feats_idxs]
-    ).T
+for i, current_coefs_df in enumerate(current_coefs_dfs):
     current_coefs_df.columns = [f"Test fold {i + 1}" for i in range(N)]
     current_coefs_df["Absolute Sum"] = current_coefs_df.abs().sum(axis=1)
-    current_coefs_df = current_coefs_df.sort_values(by="Absolute Sum", ascending=False)
+    current_coefs_df = current_coefs_df.sort_values(
+        by="Absolute Sum", ascending=False
+    )
     current_coefs_df["Prop Var Exp"] = (
         current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
     )
     current_coefs_df["Cum Var Exp"] = current_coefs_df["Prop Var Exp"].cumsum()
     current_coefs_df["Feature"] = current_coefs_df.index
-    current_coefs_df["Prediction task"] = PREDICTION_TASK
-    current_coefs_df.to_csv(OUTPUT_DIR / "coefs.csv")
-    logging.info("\tSaved coefs.csv")
+    if PREDICTION_TASK == "MethylationSubgroup":
+        current_coefs_df["Prediction task"] = CLASS_IDS[i]
+        current_coefs_df.to_csv(OUTPUT_DIR / f"{CLASS_IDS[i]}_coefs.csv")
+        logging.info(f"\tSaved {CLASS_IDS[i]}_coefs.csv")
+    else:
+        current_coefs_df["Prediction task"] = PREDICTION_TASK
+        current_coefs_df.to_csv(OUTPUT_DIR / "coefs.csv")
+        logging.info("\tSaved coefs.csv")
 
 logging.info(f"Finished running {Path(__file__).name}")
 logging.info(f"<>" * 40)
