@@ -52,15 +52,19 @@ from src.utils import (
     get_feats,
 )
 from src.utils.plotting import *
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--pred_task", type=int, required=True)
+parser.add_argument("--corr_thresh", type=float, required=True)
+args = parser.parse_args()
 
 # User defined settings
-PREDICTION_TASK = (
-    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
-)
+PREDICTION_TASK = ["MethylationSubgroup", "Chr22q", "Chr1p"][args.pred_task]
 print("Prediction task: ", PREDICTION_TASK)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
-CORRELATED_FEATS_THRESH = 0.5  # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
+CORRELATED_FEATS_THRESH = args.corr_thresh  # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
 MAX_WORKERS = 16
 FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
 HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
