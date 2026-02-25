@@ -54,7 +54,9 @@ from src.utils import (
 from src.utils.plotting import *
 
 # User defined settings
-PREDICTION_TASK = "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = (
+    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+)
 print("Prediction task: ", PREDICTION_TASK)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
@@ -331,14 +333,14 @@ for i in range(len(outer_df)):
                 if f_loc.size:
                     coefs_dict[c][f].append(cur_coefs[i, f_loc[0]])
                 else:
-                    coefs_dict[c][f].append(0.)
+                    coefs_dict[c][f].append(0.0)
     else:
         for f in coefs_dict:
             f_loc = np.where(X.columns == f)[0]
             if f_loc.size:
                 coefs_dict[f].append(cur_coefs[f_loc[0]])
             else:
-                coefs_dict[f].append(0.)
+                coefs_dict[f].append(0.0)
 
 if PREDICTION_TASK == "MethylationSubgroup":
     current_coefs_dfs = []
@@ -362,9 +364,7 @@ logging.info("\tTesting metrics saved to: testing_metrics.csv")
 for i, current_coefs_df in enumerate(current_coefs_dfs):
     current_coefs_df.columns = [f"Test fold {i + 1}" for i in range(N)]
     current_coefs_df["Absolute Sum"] = current_coefs_df.abs().sum(axis=1)
-    current_coefs_df = current_coefs_df.sort_values(
-        by="Absolute Sum", ascending=False
-    )
+    current_coefs_df = current_coefs_df.sort_values(by="Absolute Sum", ascending=False)
     current_coefs_df["Prop Var Exp"] = (
         current_coefs_df["Absolute Sum"] / current_coefs_df["Absolute Sum"].sum()
     )
