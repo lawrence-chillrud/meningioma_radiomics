@@ -24,7 +24,7 @@ FEATURE_SET = "pyradiomics"  # can be one of "pyradiomics" or "collage"
 EXP_DIRS = sorted(
     [d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()]
 )
-EXP_DIR = EXP_DIRS[-4]  # -7 to -1
+EXP_DIR = EXP_DIRS[-4]  # -4 for MethylationSubgroup, else -6
 
 # Read in all experiment metadata and results
 run_metadata_df = pd.read_csv(EXP_DIR / "run_metadata_df.csv")
@@ -74,7 +74,28 @@ else:
     for f in coef_files:
         coef_name = f.name.replace("_coefs.csv", "")
         coefs[coef_name] = pd.read_csv(f, index_col=0)
-
+print("All available test metrics:")
+print(test_metrics.T)
+print()
+print("Formatted test metrics:")
+for n in [
+    "AUC" if PREDICTION_TASK != "MethylationSubgroup" else "Macro AUC",
+    "Balanced Accuracy",
+    (
+        "Binary Recall (Sensitivity)"
+        if PREDICTION_TASK != "MethylationSubgroup"
+        else "Macro Recall (Sensitivity)"
+    ),
+    "Specificity" if PREDICTION_TASK != "MethylationSubgroup" else "Macro Specificity",
+    (
+        "Binary Precision"
+        if PREDICTION_TASK != "MethylationSubgroup"
+        else "Macro Precision"
+    ),
+    "Binary F1" if PREDICTION_TASK != "MethylationSubgroup" else "Macro F1",
+    "MCC",
+]:
+    print(f"\t{n}: {test_metrics[n].round(3).item()}")
 # %% Read in data needed for plotting
 metadata_df = pd.read_csv(METADATA_FILE)
 

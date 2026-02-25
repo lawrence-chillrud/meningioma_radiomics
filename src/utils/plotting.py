@@ -30,7 +30,7 @@ mpl.rcParams.update(
         "axes.labelsize": FONT_SIZE,
         "xtick.labelsize": FONT_SIZE,
         "ytick.labelsize": FONT_SIZE,
-        "legend.fontsize": FONT_SIZE,
+        "legend.fontsize": FONT_SIZE,  # - 2, # for MethylationSubgroup tasks,
         "figure.titlesize": FONT_SIZE,
     }
 )
@@ -58,6 +58,7 @@ def shorten_feat_name(orig_name):
         "10Percentile": "P10",
         "90Percentile": "P90",
         "Normalized": "Norm",
+        "SizeZoneNonUniformityNorm": "SZNN",
     }
     for k, v in d.items():
         short_name = short_name.replace(k, v)
@@ -263,7 +264,7 @@ def plot_multiclass_bootstrap_roc(
     n_classes = y_true.shape[1]
     fpr_grid = np.linspace(0, 1, 1000)
 
-    fig, ax = plt.subplots(figsize=(6.4, 6.4))
+    fig, ax = plt.subplots(figsize=(4.8, 4.8))
 
     for c in range(n_classes):
         fpr_c, tpr_c, _ = roc_curve(y_true[:, c], probs[:, c])
