@@ -55,7 +55,7 @@ PREDICTION_TASK = (
 print("Prediction task: ", PREDICTION_TASK)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None if PREDICTION_TASK != "MethylationSubgroup" else 0.2
-CORRELATED_FEATS_THRESH = 0.5 # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
+CORRELATED_FEATS_THRESH = 0.5  # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
 MAX_WORKERS = 16
 LAMBDAS = (
     np.linspace(0.05, 0.7, 30)

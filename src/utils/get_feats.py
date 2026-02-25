@@ -5,7 +5,9 @@ from tqdm import tqdm
 from .paths import LABELS_FILE
 
 
-def remove_correlated_features(df: pd.DataFrame, threshold: float = 0.95, verbose: bool = False) -> pd.DataFrame:
+def remove_correlated_features(
+    df: pd.DataFrame, threshold: float = 0.95, verbose: bool = False
+) -> pd.DataFrame:
     """
     Remove features with an absolute Pearson correlation greater than `threshold`
     to any earlier feature in the DataFrame.
@@ -35,14 +37,19 @@ def remove_correlated_features(df: pd.DataFrame, threshold: float = 0.95, verbos
     corr_matrix = numeric_df.corr().abs()
 
     # Use the upper triangle to avoid double-counting pairs
-    upper_tri = corr_matrix.where(
-        np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
-    )
+    upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
 
     # Identify columns to drop: any column that has a correlation > threshold
     # with at least one earlier column
     cols_to_drop = [
-        col for col in tqdm(upper_tri.columns, total=len(upper_tri.columns), desc="Dropping closely correlated vars...", ncols=120, leave=False)
+        col
+        for col in tqdm(
+            upper_tri.columns,
+            total=len(upper_tri.columns),
+            desc="Dropping closely correlated vars...",
+            ncols=120,
+            leave=False,
+        )
         if any(upper_tri[col] > threshold)
     ]
 
@@ -56,7 +63,7 @@ def remove_correlated_features(df: pd.DataFrame, threshold: float = 0.95, verbos
             for ref in correlated_with:
                 print(f"  '{ref}' <--> '{col}'  |r| = {corr_matrix.loc[ref, col]:.4f}")
         print()
-    
+
     # Reconstruct the DataFrame: keep non-numeric + surviving numeric columns
     surviving_numeric = [c for c in numeric_df.columns if c not in cols_to_drop]
     result = pd.concat([df[non_numeric], df[surviving_numeric]], axis=1)
@@ -159,7 +166,7 @@ def get_feats(
     # for easier optimization / to avoid multiple of the same shape feats
     # sharing variance across.
     if drop_extra_shape_feats:
-        X = X.drop(columns=[f for f in X.columns if ('shape' in f) and ('T1' not in f)])
+        X = X.drop(columns=[f for f in X.columns if ("shape" in f) and ("T1" not in f)])
 
     if remove_correlated_feats:
         X = remove_correlated_features(X, threshold=remove_correlated_feats)

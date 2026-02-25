@@ -17,12 +17,14 @@ from src.utils.plotting import *
 from src.utils import MODELING_DIR, get_feats
 
 # User defined variables to select proper experiment
-PREDICTION_TASK = "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+PREDICTION_TASK = (
+    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+)
 FEATURE_SET = "pyradiomics"  # can be one of "pyradiomics" or "collage"
-EXP_DIRS = sorted([
-    d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()
-])
-EXP_DIR = EXP_DIRS[-4] # -7 to -1
+EXP_DIRS = sorted(
+    [d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()]
+)
+EXP_DIR = EXP_DIRS[-4]  # -7 to -1
 
 # Read in all experiment metadata and results
 run_metadata_df = pd.read_csv(EXP_DIR / "run_metadata_df.csv")
@@ -263,8 +265,12 @@ plt.show()
 plt.close()
 
 df_val_summary_agg[df_val_summary_agg["Dataset split"] == "Validation"].mean_loss.plot()
-min_val_loss = df_val_summary_agg[df_val_summary_agg["Dataset split"] == "Validation"].mean_loss.min()
-print(f"MIN AVG VAL LOSS FOR CORR FEAT THRESH {CORRELATED_FEATS_THRESH}: {min_val_loss}")
+min_val_loss = df_val_summary_agg[
+    df_val_summary_agg["Dataset split"] == "Validation"
+].mean_loss.min()
+print(
+    f"MIN AVG VAL LOSS FOR CORR FEAT THRESH {CORRELATED_FEATS_THRESH}: {min_val_loss}"
+)
 # %% Metrics plots
 y_probs = np.vstack(
     [np.fromstring(x.strip("[]"), sep=" ") for x in test_loop["y_probs"].values]

@@ -26,6 +26,7 @@ from src.utils import (
     translate_feat_names,
     clean_feature_names,
 )
+
 # %%
 
 RESULTS_DIR = MODELING_DIR / "pyradiomics"
@@ -203,11 +204,9 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
         #     mid = 0.45
         # else:
         #     mid = 0.5
-        to_plot = cur_df.iloc[[
-            int(len(cur_df) * 0.1), 
-            int(len(cur_df) * mid),
-            int(len(cur_df) * 0.9)
-        ]].reset_index(drop=True)
+        to_plot = cur_df.iloc[
+            [int(len(cur_df) * 0.1), int(len(cur_df) * mid), int(len(cur_df) * 0.9)]
+        ].reset_index(drop=True)
 
         for j in range(len(to_plot)):
             make_thumbnail(to_plot.iloc[j], axes[j, i])
@@ -233,7 +232,7 @@ mpl.rcParams.update(
     }
 )
 
-for k in coefs.keys(): # or ['Chr22q']:
+for k in coefs.keys():  # or ['Chr22q']:
     visualize_feature_key(task=k, save=True)
 
 logging.info(f"Saved results to: {OUTPUT_DIR}")

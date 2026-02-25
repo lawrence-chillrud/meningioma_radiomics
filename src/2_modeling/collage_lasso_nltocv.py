@@ -58,7 +58,7 @@ PREDICTION_TASK = "Chr22q"  # can be one of "MethylationSubgroup", "Chr22q", or 
 print("Prediction task: ", PREDICTION_TASK)
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
-CORRELATED_FEATS_THRESH = 0.5 # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
+CORRELATED_FEATS_THRESH = 0.5  # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
 MAX_WORKERS = 16
 FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
 HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
