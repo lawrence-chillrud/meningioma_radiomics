@@ -1,12 +1,39 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 from tqdm import tqdm
 from .paths import LABELS_FILE
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+
+def compute_vif(numeric_df: pd.DataFrame) -> pd.Series:
+    """
+    Compute the Variance Inflation Factor for each column in a numeric DataFrame.
+    Returns a Series indexed by column name, sorted ascending.
+    """
+    vif = pd.Series(
+        {
+            col: variance_inflation_factor(numeric_df.values, i)
+            for i, col in enumerate(
+                tqdm(
+                    numeric_df.columns,
+                    total=len(numeric_df.columns),
+                    desc="VIF calculation",
+                    ncols=120,
+                    leave=False,
+                )
+            )
+        },
+        name="VIF",
+    )
+    return vif.sort_values()
 
 
 def remove_correlated_features(
-    df: pd.DataFrame, threshold: float = 0.95, verbose: bool = False
+    df: pd.DataFrame, vif_path: Path, threshold: float = 0.95, verbose: bool = False
 ) -> pd.DataFrame:
     """
     Remove features with an absolute Pearson correlation greater than `threshold`
@@ -19,6 +46,7 @@ def remove_correlated_features(
     Parameters
     ----------
     df        : Input DataFrame (numeric columns only are evaluated).
+    vif_path  : Path to VIF table if already calculated and cached.
     threshold : Absolute correlation cutoff (exclusive upper bound kept).
     verbose   : Whether to print which cols were dropped and why.
 
@@ -33,8 +61,32 @@ def remove_correlated_features(
     numeric_df = df.select_dtypes(include=[np.number])
     non_numeric = df.select_dtypes(exclude=[np.number]).columns.tolist()
 
-    # Compute the absolute correlation matrix
+    # --- Step 1: Sort columns by VIF ascending ---
+    if not vif_path.exists():
+        if verbose:
+            print("Computing VIF for all numeric features...")
+        vif_scores = compute_vif(numeric_df)
+        if verbose:
+            print("\nVIF scores (ascending):")
+            print(vif_scores.to_string())
+            print()
+        vif_scores.to_csv(vif_path)
+        vif_scores = pd.read_csv(vif_path, index_col=0)
+    else:
+        vif_scores = pd.read_csv(vif_path, index_col=0)
+
+    # --- Step 2: Greedy correlation filter on VIF-sorted columns ---
     corr_matrix = numeric_df.corr().abs()
+
+    vif_corr_df = pd.DataFrame(
+        {"vif": vif_scores["VIF"], "mean_corr": corr_matrix.mean()}
+    )
+    vif_corr_df = vif_corr_df.sort_values(
+        by=["vif", "mean_corr"], ascending=[True, True]
+    )
+
+    # Reorder numeric columns: lowest VIF, mean_corr first
+    numeric_df = numeric_df[vif_corr_df.index]
 
     # Use the upper triangle to avoid double-counting pairs
     upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
@@ -50,7 +102,7 @@ def remove_correlated_features(
             ncols=120,
             leave=False,
         )
-        if any(upper_tri[col] > threshold)
+        if any(upper_tri[col] >= threshold)
     ]
 
     # Report which pairs triggered the removal
@@ -169,8 +221,12 @@ def get_feats(
         X = X.drop(columns=[f for f in X.columns if ("shape" in f) and ("T1" not in f)])
 
     if remove_correlated_feats:
-        if "collage" in str(features_path).lower():
-            X = X[sorted(X.columns.to_list())]
-        X = remove_correlated_features(X, threshold=remove_correlated_feats)
+        vif_table_path = (
+            Path(features_path).parent / "VIF_tables" / f"{prediction_task}.csv"
+        )
+        vif_table_path.parent.mkdir(parents=True, exist_ok=True)
+        X = remove_correlated_features(
+            X, vif_table_path, threshold=remove_correlated_feats
+        )
 
     return X, y, sub_nos

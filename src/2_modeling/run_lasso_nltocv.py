@@ -47,15 +47,20 @@ from tqdm import tqdm
 
 from src.utils import PYRAD_FILE, LABELS_FILE, METADATA_FILE, MODELING_DIR, get_feats
 from src.utils.plotting import *
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--pred_task", type=int, required=True)
+parser.add_argument("--corr_thresh", type=float, required=True)
+args = parser.parse_args()
 
 # User defined settings
-PREDICTION_TASK = (
-    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
-)
+PREDICTION_TASK = ["Chr22q", "Chr1p", "MethylationSubgroup"][args.pred_task]
 print("Prediction task: ", PREDICTION_TASK)
+CORRELATED_FEATS_THRESH = args.corr_thresh
+
 SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
-LOW_VAR_THRESH = None if PREDICTION_TASK != "MethylationSubgroup" else 0.2
-CORRELATED_FEATS_THRESH = 0.5  # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
+LOW_VAR_THRESH = None  # if PREDICTION_TASK != "MethylationSubgroup" else 0.2
 MAX_WORKERS = 16
 LAMBDAS = (
     np.linspace(0.05, 0.7, 30)
@@ -95,6 +100,7 @@ X, y, SUBJECTS = get_feats(
     remove_correlated_feats=CORRELATED_FEATS_THRESH,
 )
 
+# %%
 # Log run's metadata
 run_metadata_df = pd.DataFrame(
     {

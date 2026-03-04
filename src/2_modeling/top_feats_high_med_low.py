@@ -27,8 +27,6 @@ from src.utils import (
     clean_feature_names,
 )
 
-# %%
-
 RESULTS_DIR = MODELING_DIR / "pyradiomics"
 NUM_TOP_FEATS = 5
 
@@ -45,8 +43,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-coef_files = [f for f in RESULTS_DIR.rglob("*coefs.csv")]
-testing_loop_files = [f for f in RESULTS_DIR.rglob("*testing_loop.csv")]
+run_dir = "MethylationSubgroup/02-24-2026_17-27-31"  # "MethylationSubgroup/02-24-2026_17-27-31", or "Chr22q/02-24-2026_16-49-06", or "Chr1p/02-24-2026_17-00-54"
+coef_files = [f for f in (RESULTS_DIR / run_dir).rglob("*coefs.csv")]
+testing_loop_files = [f for f in (RESULTS_DIR / run_dir).rglob("*testing_loop.csv")]
 metadata_df = pd.read_csv(METADATA_FILE, index_col=[0])
 
 logging.info(f"<>" * 40)
@@ -67,38 +66,7 @@ for f in coef_files:
     else:
         coefs[prediction_task] = pd.read_csv(f, index_col=[0])
 
-# %%
-top_betas = (
-    coefs["Chr22q"].filter(regex=r"^Test fold").median(axis=1).round(3).iloc[:5].values
-)
-top_feats = coefs["Chr22q"]["Feature"].iloc[:5].values
-top_feats_clean = translate_feat_names(clean_feature_names(top_feats))
 
-X, y, SUBJECTS = get_feats(
-    prediction_task="Chr22q",
-    features_path=PYRAD_FILE,
-    scaler="None",
-)
-viable_idxs = X[top_feats[0]].loc[X[top_feats[0]] != 0].index
-X, y, SUBJECTS = get_feats(
-    prediction_task="Chr22q",
-    features_path=PYRAD_FILE,
-    scaler=None,
-)
-x_vals = X.iloc[viable_idxs][top_feats[0]].round(3).values
-subs = SUBJECTS[viable_idxs]
-cur_df = (
-    pd.DataFrame(
-        {"feat": top_feats_clean[0], "beta": top_betas[0], "x": x_vals, "subject": subs}
-    )
-    .sort_values(by="x", ascending=False)
-    .reset_index(drop=True)
-)
-to_plot = cur_df.iloc[[0, len(cur_df) // 2, -1]]
-to_plot
-
-
-# %%
 def rescale_linear(array: np.ndarray, new_min: int, new_max: int):
     """Rescale an array linearly."""
     minimum, maximum = np.min(array), np.max(array)
@@ -146,14 +114,18 @@ def make_thumbnail(
         arr_rgb, contours, -1, (0, 1, 0), contour_thickness
     )
 
-    title = f"Subject {feat.subject}\n{feat.feat_clean} = {feat.x}"
+    title = (
+        f"Subject {feat.subject}\nRaw val = {feat.x}\nStandardized val = {feat.x_std}"
+    )
 
     ax.imshow(arr_with_contours)
     ax.axis("off")
     ax.text(0.5, -0.02, title, transform=ax.transAxes, ha="center", va="top")
 
 
-def visualize_feature_key(task="Chr22q", dpi=300, save=False):
+def visualize_feature_key(
+    task="Chr22q", dpi=300, save=False, top_betas=None, top_feats=None
+):
     if task not in ["Chr22q", "Chr1p"]:
         pt = "MethylationSubgroup"
     else:
@@ -163,16 +135,25 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
     if save and output_fp.exists():
         return
 
-    top_betas = (
-        coefs[task].filter(regex=r"^Test fold").median(axis=1).round(3).iloc[:5].values
-    )
-    top_feats = coefs[task]["Feature"].iloc[:5].values
+    if top_betas is None:
+        top_betas = (
+            coefs[task]
+            .filter(regex=r"^Test fold")
+            .median(axis=1)
+            .round(3)
+            .iloc[:5]
+            .values
+        )
+    if top_feats is None:
+        top_feats = coefs[task]["Feature"].iloc[:5].values
+
     top_feats_clean = translate_feat_names(clean_feature_names(top_feats))
 
     X, _, _ = get_feats(
         prediction_task=pt,
         features_path=PYRAD_FILE,
         scaler="None",
+        remove_correlated_feats=None,
     )
 
     fig, axes = plt.subplots(3, 5, figsize=(20 * 5, 20 * 3), dpi=dpi, squeeze=False)
@@ -182,9 +163,17 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
         X_i, _, SUBJECTS = get_feats(
             prediction_task=pt,
             features_path=PYRAD_FILE,
+            scaler="None",
+            remove_correlated_feats=None,
+        )
+        X_i_std, _, _ = get_feats(
+            prediction_task=pt,
+            features_path=PYRAD_FILE,
             scaler="Standard",
+            remove_correlated_feats=None,
         )
         x_vals = X_i.iloc[viable_idxs][top_feats[i]].round(3).values
+        x_std_vals = X_i_std.iloc[viable_idxs][top_feats[i]].round(3).values
         subs = SUBJECTS[viable_idxs]
         cur_df = (
             pd.DataFrame(
@@ -193,6 +182,7 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
                     "feat_clean": top_feats_clean[i],
                     "beta": top_betas[i],
                     "x": x_vals,
+                    "x_std": x_std_vals,
                     "subject": subs,
                 }
             )
@@ -210,6 +200,7 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
 
         for j in range(len(to_plot)):
             make_thumbnail(to_plot.iloc[j], axes[j, i])
+        axes[0, i].set_title(top_feats_clean[i])
 
     fig.suptitle(f"{task} Top 5 most important features", y=0.98)
     if save:
@@ -224,16 +215,41 @@ def visualize_feature_key(task="Chr22q", dpi=300, save=False):
 FONT_SIZE = 32
 mpl.rcParams.update(
     {
-        "font.size": FONT_SIZE + 32,
-        # "axes.titlesize": FONT_SIZE + 16,
+        "font.size": FONT_SIZE + 12,
+        "axes.titlesize": FONT_SIZE + 32,
         # "axes.labelsize": FONT_SIZE + 16,
         # "xtick.labelsize": FONT_SIZE + 16,
         "figure.titlesize": FONT_SIZE + 64,
     }
 )
 
-for k in coefs.keys():  # or ['Chr22q']:
-    visualize_feature_key(task=k, save=True)
+# %%
+# for k in coefs.keys():  # or ['Chr22q']:
+#     visualize_feature_key(task=k, save=True)
+
+if "Chr1p" in coefs.keys():
+    visualize_feature_key(task="Chr1p", save=True)
+if "Chr22q" in coefs.keys():
+    visualize_feature_key(task="Chr22q", save=True)
+if "Merlin Intact" in coefs.keys():  # This means we need methyl subgroup results:
+    # Methylation Subgroup
+    mi_top_feats = coefs["Merlin Intact"].iloc[:3]
+    ie_top_feats = coefs["Immune Enriched"].iloc[:1]
+    hm_top_feats = coefs["Hypermetabolic"].iloc[:1]
+    methylsubgroup_top_feats_df = pd.concat([mi_top_feats, ie_top_feats, hm_top_feats])
+    methylsubgroup_top_feats = methylsubgroup_top_feats_df["Feature"].values
+    methylsubgroup_top_betas = (
+        methylsubgroup_top_feats_df.filter(regex=r"^Test fold")
+        .median(axis=1)
+        .round(3)
+        .values
+    )
+    visualize_feature_key(
+        task="MethylationSubgroup",
+        save=True,
+        top_betas=methylsubgroup_top_betas,
+        top_feats=methylsubgroup_top_feats,
+    )
 
 logging.info(f"Saved results to: {OUTPUT_DIR}")
 logging.info(f"Finished running {Path(__file__).name}")
