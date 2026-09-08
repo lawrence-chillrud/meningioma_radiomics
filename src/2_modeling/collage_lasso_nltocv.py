@@ -66,7 +66,7 @@ SCALER = "Standard"  # can be one of "Standard", "MinMax", or None
 LOW_VAR_THRESH = None  # or 0.2?
 CORRELATED_FEATS_THRESH = args.corr_thresh  # 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99
 MAX_WORKERS = 16
-FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv")]
+FEATURES_PATHS = [f for f in COLLAGE_DIR.rglob("*wide-features*.csv") if f.parent.parent.name != "VIF_tables"]
 HARALICK_WINDOW_SIZES = [3, 5, 7, 9]
 BIN_SIZES = [16, 32, 48, 64]
 LAMBDAS = np.linspace(0.05, 0.35, 10)
@@ -81,7 +81,7 @@ LR_PARAMS = {
 
 # Output dir and logfile set up
 TIMESTAMP = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-OUTPUT_DIR = MODELING_DIR / "collage" / PREDICTION_TASK / TIMESTAMP
+OUTPUT_DIR = MODELING_DIR / "collage" / PREDICTION_TASK / f"{TIMESTAMP}_corrthresh_{CORRELATED_FEATS_THRESH}"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGFILE = OUTPUT_DIR / "logfile.txt"
 

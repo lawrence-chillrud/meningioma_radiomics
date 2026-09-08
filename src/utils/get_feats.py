@@ -1,35 +1,76 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from statsmodels.stats.outliers_influence import variance_inflation_factor
 from tqdm import tqdm
 from .paths import LABELS_FILE
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from joblib import Parallel, delayed
+from collections import defaultdict
 
 
-def compute_vif(numeric_df: pd.DataFrame) -> pd.Series:
+def _vif_single(X: np.ndarray, idx: int) -> tuple[int, float]:
     """
-    Compute the Variance Inflation Factor for each column in a numeric DataFrame.
-    Returns a Series indexed by column name, sorted ascending.
+    Compute VIF for column `idx` within the submatrix X (already pulse-filtered).
+    Returns (idx, vif_value) so results can be reassembled in order.
     """
-    vif = pd.Series(
-        {
-            col: variance_inflation_factor(numeric_df.values, i)
-            for i, col in enumerate(
-                tqdm(
-                    numeric_df.columns,
-                    total=len(numeric_df.columns),
-                    desc="VIF calculation",
-                    ncols=120,
-                    leave=False,
-                )
+    n_cols = X.shape[1]
+    y = X[:, idx]
+    mask = np.arange(n_cols) != idx
+    Z = np.column_stack([np.ones(len(y)), X[:, mask]])
+    coeffs, _, _, _ = np.linalg.lstsq(Z, y, rcond=None)
+    y_hat = Z @ coeffs
+    ss_res = np.sum((y - y_hat) ** 2)
+    ss_tot = np.sum((y - y.mean()) ** 2)
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    return idx, (1.0 / (1.0 - r2) if r2 < 1.0 else np.inf)
+
+
+def _parse_pulse(col: str) -> str:
+    """Extract the pulse sequence prefix from a feature name [PULSE]_[ROI]_..."""
+    return col.split("_")[0]
+
+
+def compute_vif(numeric_df: pd.DataFrame, n_jobs: int = -1) -> pd.Series:
+    """
+    Compute VIF for each feature, regressed only against features sharing
+    the same pulse sequence prefix. This avoids inf VIFs caused by near-
+    perfect multicollinearity across the full ~20k feature set.
+
+    Args:
+        numeric_df: DataFrame with columns named [PULSE]_[ROI]_[FEAT]_[FA]_[STAT].
+        n_jobs:     Number of worker processes. -1 = all CPU cores (default).
+
+    Returns:
+        pd.Series of VIF values indexed by column name, sorted ascending.
+    """
+    # Group column names by pulse prefix
+    pulse_groups: dict[str, list[str]] = defaultdict(list)
+    for col in numeric_df.columns:
+        pulse_groups[_parse_pulse(col)].append(col)
+
+    all_results: dict[str, float] = {}
+
+    for pulse, group_cols in pulse_groups.items():
+        X = numeric_df[group_cols].values.astype(np.float64)
+        n = len(group_cols)
+
+        results = Parallel(n_jobs=n_jobs, backend="loky", verbose=0)(
+            delayed(_vif_single)(X, i)
+            for i in tqdm(
+                range(n),
+                total=n,
+                desc=f"VIF [{pulse}] ({n} features)",
+                ncols=120,
+                leave=False,
             )
-        },
-        name="VIF",
-    )
-    return vif.sort_values()
+        )
+
+        for local_idx, vif_val in results:
+            all_results[group_cols[local_idx]] = vif_val
+
+    return pd.Series(all_results, name="VIF").sort_values()
 
 
 def remove_correlated_features(
@@ -106,7 +147,7 @@ def remove_correlated_features(
     ]
 
     # Report which pairs triggered the removal
-    print(f"Correlation threshold : |r| > {threshold}")
+    if verbose: print(f"Correlation threshold : |r| > {threshold}")
     if verbose:
         print(f"Columns dropped       : {cols_to_drop}\n")
         print("Correlated pairs that caused removal:")
@@ -120,8 +161,9 @@ def remove_correlated_features(
     surviving_numeric = [c for c in numeric_df.columns if c not in cols_to_drop]
     result = pd.concat([df[non_numeric], df[surviving_numeric]], axis=1)
 
-    print(f"Original shape : {df.shape}")
-    print(f"Reduced shape  : {result.shape}")
+    if verbose: 
+        print(f"Original shape : {df.shape}")
+        print(f"Reduced shape  : {result.shape}")
     return result
 
 
@@ -157,6 +199,7 @@ def get_feats(
     low_var_thresh=None,
     drop_extra_shape_feats=True,
     remove_correlated_feats=0.6,
+    drop_constant_feats=True,
 ):
     """
     If low_var_thresh=None, no low-variance columns are dropped before applying scaler.
@@ -190,8 +233,9 @@ def get_feats(
     X = X.drop(columns=[col for col in X.columns if "-7-" in col])  # NAWM feats
 
     # Drop cols w/constant values
-    constant_feats = [col for col in X.columns if X[col].nunique() == 1]
-    X = X.drop(columns=constant_feats)
+    if drop_constant_feats:
+        constant_feats = [col for col in X.columns if X[col].nunique() == 1]
+        X = X.drop(columns=constant_feats)
 
     # Drop cols w/low variance
     if low_var_thresh:
@@ -221,9 +265,14 @@ def get_feats(
         X = X.drop(columns=[f for f in X.columns if ("shape" in f) and ("T1" not in f)])
 
     if remove_correlated_feats:
-        vif_table_path = (
-            Path(features_path).parent / "VIF_tables" / f"{prediction_task}.csv"
-        )
+        if "pyradiomics" in str(features_path):
+            vif_table_path = (
+                Path(features_path).parent / "VIF_tables" / f"{prediction_task}.csv"
+            )
+        else:
+            vif_table_path = (
+                Path(features_path).parent / "VIF_tables" / prediction_task / features_path.name
+            )
         vif_table_path.parent.mkdir(parents=True, exist_ok=True)
         X = remove_correlated_features(
             X, vif_table_path, threshold=remove_correlated_feats

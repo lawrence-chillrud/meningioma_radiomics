@@ -124,7 +124,7 @@ def make_thumbnail(
 
 
 def visualize_feature_key(
-    task="Chr22q", dpi=300, save=False, top_betas=None, top_feats=None
+    task="Chr22q", dpi=600, save=False, top_betas=None, top_feats=None
 ):
     if task not in ["Chr22q", "Chr1p"]:
         pt = "MethylationSubgroup"

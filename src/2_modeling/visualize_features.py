@@ -189,7 +189,7 @@ def make_thumbnail(
 
 
 def visualize_features(
-    task="Chr22q", pred_type="TP", num_feats=NUM_TOP_FEATS, dpi=300, save=True
+    task="Chr22q", pred_type="TP", num_feats=NUM_TOP_FEATS, dpi=600, save=True
 ):
     class_ids = ["Intact", "Lost"]
 
@@ -262,7 +262,7 @@ def visualize_features(
 
 
 def visualize_methylation_features(
-    pred_type="correct", num_feats=NUM_TOP_FEATS, dpi=300, save=True
+    pred_type="correct", num_feats=NUM_TOP_FEATS, dpi=600, save=True
 ):
     top_candidates_df = top_candidates["MethylationSubgroup"]
     coefs_df = coefs["MethylationSubgroup"]

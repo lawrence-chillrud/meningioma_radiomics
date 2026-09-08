@@ -32,7 +32,7 @@ def make_thumbnail(f, output_dir=None, slice_num=None):
     if output_dir:
         output_fn = f.name.split(".nii")[0]
         output_fp = output_dir / f"{output_fn}.jpg"
-        plt.savefig(output_fp)
+        plt.savefig(output_fp, dpi=600)
     else:
         plt.show()
     plt.close()

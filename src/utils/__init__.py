@@ -5,3 +5,4 @@ from .get_segs import get_segs, get_segs_roi_key
 from .io import read_ndarray, write_ndarray
 from .paths import *
 from .plotting import *
+from .check_correlation import *

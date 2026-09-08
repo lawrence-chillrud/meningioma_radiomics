@@ -17,14 +17,14 @@ from src.utils.plotting import *
 from src.utils import MODELING_DIR, get_feats
 
 # User defined variables to select proper experiment
-PREDICTION_TASK = (
-    "MethylationSubgroup"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
-)
-FEATURE_SET = "pyradiomics"  # can be one of "pyradiomics" or "collage"
+PREDICTION_TASK = "Chr1p"  # can be one of "MethylationSubgroup", "Chr22q", or "Chr1p"
+FEATURE_SET = "collage"  # can be one of "pyradiomics" or "collage"
 EXP_DIRS = sorted(
     [d for d in (MODELING_DIR / FEATURE_SET / PREDICTION_TASK).iterdir() if d.is_dir()]
 )
-EXP_DIR = EXP_DIRS[-4]  # -4 for MethylationSubgroup, else -6
+EXP_DIR = EXP_DIRS[-5]  # pyrad: -12 for MethylationSubgroup, -8 for Chr1p, -3 for Chr22q, collage: -5 for Chr1p, else -8
+OUTPUT_DIR = Path(f"data/paper_figs/{FEATURE_SET}_{PREDICTION_TASK}")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Read in all experiment metadata and results
 run_metadata_df = pd.read_csv(EXP_DIR / "run_metadata_df.csv")
@@ -34,11 +34,14 @@ LOW_VAR_THRESH = (
     if not run_metadata_df["LOW_VAR_THRESH"].isna().values[0]
     else None
 )
-CORRELATED_FEATS_THRESH = (
-    run_metadata_df["CORRELATED_FEATS_THRESH"].values[0]
-    if not run_metadata_df["CORRELATED_FEATS_THRESH"].isna().values[0]
-    else None
-)
+if "CORRELATED_FEATS_THRESH" not in run_metadata_df.columns:
+    CORRELATED_FEATS_THRESH = None
+else:
+    CORRELATED_FEATS_THRESH = (
+        run_metadata_df["CORRELATED_FEATS_THRESH"].values[0]
+        if not run_metadata_df["CORRELATED_FEATS_THRESH"].isna().values[0]
+        else None
+    )
 LAMBDAS = np.fromstring(run_metadata_df["LAMBDAS"].values[0].strip("[]"), sep=" ")
 LR_PARAMS = run_metadata_df["LR_PARAMS"].values[0]
 if FEATURE_SET == "pyradiomics":
@@ -64,7 +67,6 @@ print(best_lambdas_counts)
 val_loop = pd.read_csv(EXP_DIR / "validation_loop.csv")
 test_loop = pd.read_csv(EXP_DIR / "testing_loop.csv")
 
-# %%
 test_metrics = pd.read_csv(EXP_DIR / "testing_metrics.csv")
 coefs = {}
 if PREDICTION_TASK != "MethylationSubgroup":
@@ -78,6 +80,10 @@ print("All available test metrics:")
 print(test_metrics.T)
 print()
 print("Formatted test metrics:")
+
+def metric_mean(value):
+    return float(str(value).split()[0])
+
 for n in [
     "AUC" if PREDICTION_TASK != "MethylationSubgroup" else "Macro AUC",
     "Balanced Accuracy",
@@ -96,10 +102,12 @@ for n in [
     "MCC",
 ]:
     print(f"\t{n}: {test_metrics[n].round(3).item()}")
-# %% Read in data needed for plotting
+
 metadata_df = pd.read_csv(METADATA_FILE)
 
 if FEATURE_SET == "pyradiomics":
+    if PREDICTION_TASK == "MethylationSubgroup":
+        LOW_VAR_THRESH = None
     X, y, SUBJECTS = get_feats(
         prediction_task=PREDICTION_TASK,
         features_path=PYRAD_FILE,
@@ -132,30 +140,6 @@ CLASS_IDS = ["Intact", "Lost"]
 if N_CLASSES == 3:
     CLASS_IDS = ["Merlin Intact", "Immune Enriched", "Hypermetabolic"]
 
-# %% Cross val fig
-
-# Collage cross-val plot (only one test index for the below... needs to be adapted for all test idxs)
-# collage_stats = (
-#     val_summary_long[val_summary_long["Dataset split"] == "Validation"]
-#     .drop(columns=["test_idx", "Dataset split"])
-#     .loc[lambda df: df.groupby(["win_size", "bin_size"])["loss"].idxmin()]
-# )
-# np.array(collage_stats["bin_size"]).reshape(4, 4)
-# np.array(collage_stats["win_size"]).reshape(4, 4)
-# np.array(collage_stats["loss"]).reshape(4, 4)
-# plt.figure()
-# sns.heatmap(
-#     np.array(collage_stats["loss"]).reshape(4, 4),
-#     xticklabels=np.unique(collage_stats["bin_size"]),
-#     yticklabels=np.unique(collage_stats["win_size"]),
-#     annot=np.array(collage_stats["lambda_i"]).reshape(4, 4),
-# )
-# plt.xlabel("Bin size")
-# plt.ylabel("Window size")
-# plt.show()
-# plt.close()
-
-
 val_summary = (
     val_loop.groupby(["test_idx", "lambda_i"])[["train_loss", "val_loss"]]
     .mean()
@@ -183,7 +167,6 @@ df_val_summary_agg["ci_low"] = df_val_summary_agg[
 df_val_summary_agg["ci_high"] = df_val_summary_agg[
     "mean_loss"
 ] + 1.96 * df_val_summary_agg["std_loss"] / np.sqrt(df_val_summary_agg["n"])
-
 
 class HandlerLineMarkerPatch(HandlerBase):
     """Custom handler to draw line + marker + patch in one legend entry."""
@@ -292,19 +275,98 @@ min_val_loss = df_val_summary_agg[
 print(
     f"MIN AVG VAL LOSS FOR CORR FEAT THRESH {CORRELATED_FEATS_THRESH}: {min_val_loss}"
 )
-# %% Metrics plots
+
+if FEATURE_SET == "collage":
+    # Collage cross-val plot (only one test index for the below... needs to be adapted for all test idxs)
+    val_summary = (
+        val_loop.groupby(["test_idx", "win_size", "bin_size"])[["train_loss", "val_loss"]]
+        .mean()
+        .reset_index()
+    )
+    val_summary = val_summary.rename(
+        columns={"train_loss": "Training", "val_loss": "Validation"}
+    )
+    val_summary_long = val_summary.melt(
+        id_vars=["test_idx", "win_size", "bin_size"], var_name="Dataset split", value_name="loss"
+    )
+
+    collage_stats = (
+        val_summary_long[val_summary_long["Dataset split"] == "Validation"]
+        .drop(columns=["test_idx", "Dataset split"])
+        .loc[lambda df: df.groupby(["win_size", "bin_size"])["loss"].idxmin()]
+    )
+    np.array(collage_stats["bin_size"]).reshape(4, 4)
+    np.array(collage_stats["win_size"]).reshape(4, 4)
+    np.array(collage_stats["loss"]).reshape(4, 4)
+    plt.figure()
+    sns.heatmap(
+        np.array(collage_stats["loss"]).reshape(4, 4),
+        xticklabels=np.unique(collage_stats["bin_size"]),
+        yticklabels=np.unique(collage_stats["win_size"]),
+        # annot=np.array(collage_stats["loss"]).reshape(4, 4),
+        # annot=np.array(collage_stats["lambda_i"]).reshape(4, 4),
+        cmap="viridis_r",
+        cbar_kws={'label': 'Mean validation loss'},
+        annot=True,
+        fmt=".2f"
+    )
+    plt.xlabel("CoLlAGe bin size (v)")
+    plt.ylabel("CoLlAGe neighborhood size (M)")
+    plt.show()
+    plt.close()
+
 y_probs = np.vstack(
     [np.fromstring(x.strip("[]"), sep=" ") for x in test_loop["y_probs"].values]
 )
 y_true = test_loop["y_true"].values
 if N_CLASSES == 3:
     metrics = plot_multiclass_results(
-        y_probs, y_true, ["MI", "IE", "HM"], PREDICTION_TASK, plot=True
+        y_probs,
+        y_true,
+        ["MI", "IE", "HM"],
+        PREDICTION_TASK,
+        plot=True,
+        save_dir=OUTPUT_DIR,
     )
 else:
-    metrics = plot_binary_results(y_probs, y_true, CLASS_IDS, plot=True)
+    metrics = plot_binary_results(
+        y_probs,
+        y_true,
+        CLASS_IDS,
+        prediction_task=PREDICTION_TASK,
+        plot=True,
+        save_dir=OUTPUT_DIR,
+    )
 
-# %% Feature importances
+print("Formatted test metrics:")
+for n in [
+    "AUC" if PREDICTION_TASK != "MethylationSubgroup" else "Macro AUC",
+    "Balanced Accuracy",
+    (
+        "Binary Recall (Sensitivity)"
+        if PREDICTION_TASK != "MethylationSubgroup"
+        else "Macro Recall (Sensitivity)"
+    ),
+    "Specificity" if PREDICTION_TASK != "MethylationSubgroup" else "Macro Specificity",
+    (
+        "Binary Precision"
+        if PREDICTION_TASK != "MethylationSubgroup"
+        else "Macro Precision"
+    ),
+    "Binary F1" if PREDICTION_TASK != "MethylationSubgroup" else "Macro F1",
+    "MCC"
+]:
+    print(f"\t{n}: {metrics[n]}")
+
+youden_names = ["Youden's J"] if PREDICTION_TASK != "MethylationSubgroup" else ["Youden's J (MI)", "Youden's J (IE)", "Youden's J (HM)"]
+for n in youden_names:
+    print(f"\t{n}: {metrics[n]}")
+
+you = 0
+for n in youden_names:
+    you += metric_mean(metrics[n])
+print("\tYouden's J Average: ", round(you/len(youden_names), 3))
+
 for c in coefs:
     print(f"BEGINNING PLOTS FOR: {c}")
     print("TOTAL NUM FEATS: ", len(coefs[c]))
@@ -322,15 +384,21 @@ for c in coefs:
     plot_heatmap(most_robust_feats_df.filter(like="Test fold"))
 
     # Boxplots
-    plot_coef_boxplot2(
+    protective_label = f"Protective for {c} intact" if c.startswith('C') else f"Predicts NON-{c.replace('Hypermetabolic', 'Hypermitotic')}"
+    risk_label = f"Increased risk of {c} lost" if c.startswith('C') else f"Predicts {c.replace('Hypermetabolic', 'Hypermitotic')}"
+    plot_coef_boxplot3(
         most_robust_feats_df.filter(like="Test fold").T,
         most_robust_feats_df["Prop Var Exp"],
         figsize=(15, 4),
+        alpha=0.01,
+        protective_label=protective_label,
+        risk_label=risk_label,
+        save_path=OUTPUT_DIR / f"{c}_important_features.png",
     )
 
     # Correlation matrix of top features
     feat_corr = X[most_robust_feats_df["Prop Var Exp"].index].corr()
-    plot_corr_matrix(feat_corr)
+    plot_corr_matrix(feat_corr, cbar_pos=None)
 
     # # CoLlAGe Correlation matrix of top features
     # feat_corr = Xs["win-9 bin-64"][
@@ -341,106 +409,4 @@ for c in coefs:
     # current_coefs_df.drop(columns=[c for c in most_robust_feats_df.columns if not c.startswith('Test fold')]).T.describe().T[["mean", "std", "min", "max"]].sort_values(by="mean", ascending=False)
     # Frequency stability
     (coefs[c].filter(like="Test fold") != 0).T.mean()
-# %%
-# CoLlAGe error analysis
-# from src.utils import MRIS_DIR
-
-# incorrect_subjects = SUBJECTS[
-#     f"win-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][0]} bin-{best_hyperparams[['win_size', 'bin_size']].value_counts().index[0][1]}"
-# ][outer_df[outer_df["y_true"] != outer_df["y_pred"]].test_idx.to_list()]
-# mri_filepaths = MRIS_DIR.rglob("*Presurgical*")
-
-# sessions = {}
-# for subject in MRIS_DIR.iterdir():
-#     if subject.is_dir():
-#         for session in (MRIS_DIR / subject).iterdir():
-#             if session.is_dir():
-#                 sessions[int(subject.name)] = " ".join(session.name.split("_")[1:])
-
-# incorrect_sessions = []
-# for s in incorrect_subjects:
-#     incorrect_sessions.append(sessions[s])
-# print("INCORRECT SESSIONS:\n", pd.Series(incorrect_sessions).value_counts())
-
-# print("TOTAL SESSIONS:\n", pd.Series(sessions.values()).value_counts())
-
-# %%
-# THIS CODE IS SIMPLY TO CHECK WHETHER SHAPE FEATS CORRESPOND TO AXIAL, SAGITTAL, OR CORONAL PLANES!!
-
-# import os
-# import sys
-
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
-# from src.utils import PYRAD_FILE
-# from src.utils import (
-#     get_mris,
-#     get_segs,
-#     get_feats,
-#     clean_feature_names,
-#     translate_feat_names,
-# )
-# import SimpleITK as sitk
-# import matplotlib.pyplot as plt
-# import numpy as np
-# import cv2
-
-# X, y, SUBJECTS = get_feats(
-#     prediction_task="Chr22q",
-#     features_path=PYRAD_FILE,
-#     scaler="None",
-# )
-# X.columns = translate_feat_names(clean_feature_names(X.columns))
-# X["subject"] = SUBJECTS
-# to_check = X[
-#     [
-#         "subject",
-#         "Tmr MaxAxialDiam on T1",
-#         "Tmr MaxSagittalDiam on T1",
-#         "Tmr MaxCoronalDiam on T1",
-#     ]
-# ].sort_values(by=["Tmr MaxAxialDiam on T1"], ascending=[False])
-
-
-# def rescale_linear(array: np.ndarray, new_min: int, new_max: int):
-#     """Rescale an array linearly."""
-#     minimum, maximum = np.min(array), np.max(array)
-#     m = (new_max - new_min) / (maximum - minimum)
-#     b = new_min - m * minimum
-#     return m * array + b
-
-
-# %%
-# subject = 85
-
-# mris = get_mris(subject)
-# im = sitk.ReadImage(mris["T1_POST"])
-# im_arr = sitk.GetArrayFromImage(im)
-
-# seg = sitk.GetArrayFromImage(get_segs(subject, with_sitk=True, rois=3)[3])
-
-# # axis 0 is sagittal
-# # axis 1 is coronal
-# # axis 2 is axial
-# views = ["sagittal", "coronal", "axial"]
-# for i in range(3):
-#     cancerous_pixels_per_slice = np.sum(seg, axis=tuple(set([0, 1, 2]) - set([i])))
-#     cslice = np.argmax(cancerous_pixels_per_slice)
-
-#     mri_slice = np.take(im_arr, indices=cslice, axis=i)
-#     seg_slice = np.take(seg, indices=cslice, axis=i)
-
-#     mri_rescaled = rescale_linear(mri_slice, 0, 1)
-#     seg_rescaled = rescale_linear(seg_slice, 0, 1).astype(np.uint8)
-
-#     arr_rgb = cv2.cvtColor(mri_rescaled, cv2.COLOR_GRAY2RGB)
-#     contours, _ = cv2.findContours(seg_rescaled, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-#     arr_with_contours = cv2.drawContours(arr_rgb, contours, -1, (0, 1, 0), 1)
-
-#     plt.imshow(arr_with_contours)
-#     plt.title(f"{views[i]}: {np.max(cancerous_pixels_per_slice)}")
-#     plt.show()
-#     plt.close()
-
 # %%

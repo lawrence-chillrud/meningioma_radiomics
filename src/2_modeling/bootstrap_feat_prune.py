@@ -1,3 +1,4 @@
+# %%
 import os
 import sys
 
@@ -7,20 +8,34 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib as mpl
 from tqdm import tqdm
-from src.utils import PYRAD_FILE, LABELS_FILE, MODELING_DIR, clean_feature_names
+from src.utils import PYRAD_FILE, LABELS_FILE, MODELING_DIR, clean_feature_names, get_feats
+from src.utils.get_feats import remove_correlated_features
+from src.utils.plotting import translate_feat_names
+
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from pathlib import Path
 
-PREDICTION_TASK = "Chr22q"  # ["Chr22q", "Chr1p", "MethylationSubgroup"]
-CORRELATED_FEATS_THRESH = 0.95  # [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
+PREDICTION_TASK = "MethylationSubgroup"  # ["Chr22q", "Chr1p", "MethylationSubgroup"]
+CORRELATED_FEATS_THRESH = 0.99  # [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99]
 RESULTS_DIR = MODELING_DIR / "pyradiomics" / Path(__file__).name.replace(".py", "")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+FONT_SIZE = 16
 
-# ---------------------------------------------------------------------------
-# Load data
-# ---------------------------------------------------------------------------
+mpl.rcParams.update(
+    {
+        "font.size": FONT_SIZE,
+        "axes.titlesize": FONT_SIZE,
+        "axes.labelsize": FONT_SIZE,
+        "xtick.labelsize": FONT_SIZE,
+        "ytick.labelsize": FONT_SIZE,
+        "legend.fontsize": FONT_SIZE,
+        "figure.titlesize": FONT_SIZE,
+    }
+)
+
 def load_feats(
     prediction_task=PREDICTION_TASK,
     features_path=PYRAD_FILE,
@@ -69,90 +84,6 @@ def load_feats(
     return X, y, sub_nos
 
 
-# ---------------------------------------------------------------------------
-# Core pruning logic
-# ---------------------------------------------------------------------------
-def compute_vif(numeric_df: pd.DataFrame) -> pd.Series:
-    """
-    Compute the Variance Inflation Factor for each column in a numeric DataFrame.
-    Returns a Series indexed by column name, sorted ascending.
-    """
-    vif = pd.Series(
-        {
-            col: variance_inflation_factor(numeric_df.values, i)
-            for i, col in enumerate(
-                tqdm(
-                    numeric_df.columns,
-                    total=len(numeric_df.columns),
-                    desc="VIF calculation",
-                    ncols=120,
-                    leave=False,
-                )
-            )
-        },
-        name="VIF",
-    )
-    return vif.sort_values()
-
-
-def remove_correlated_features(
-    df: pd.DataFrame, vif_path: Path, threshold: float = CORRELATED_FEATS_THRESH
-) -> pd.DataFrame:
-    if not (0 < threshold <= 1):
-        raise ValueError("threshold must be in the range (0, 1].")
-
-    # Work only with numeric columns
-    numeric_df = df.select_dtypes(include=[np.number])
-
-    # --- Step 1: Sort columns by VIF ascending ---
-    if not vif_path.exists():
-        vif_scores = compute_vif(numeric_df)
-        vif_scores.to_csv(vif_path)
-        vif_scores = pd.read_csv(vif_path, index_col=0)
-    else:
-        vif_scores = pd.read_csv(vif_path, index_col=0)
-
-    # --- Step 2: Greedy correlation filter on VIF-sorted columns ---
-    corr_matrix = numeric_df.corr().abs()
-
-    vif_corr_df = pd.DataFrame(
-        {"vif": vif_scores["VIF"], "mean_corr": corr_matrix.mean()}
-    )
-    vif_corr_df = vif_corr_df.sort_values(
-        by=["vif", "mean_corr"], ascending=[True, True]
-    )
-
-    # Reorder numeric columns: lowest VIF, mean_corr first
-    numeric_df = numeric_df[vif_corr_df.index]
-
-    # Use the upper triangle to avoid double-counting pairs
-    upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-
-    # Identify columns to drop: any column that has a correlation > threshold
-    # with at least one earlier column
-    cols_to_drop = [
-        col
-        for col in tqdm(
-            upper_tri.columns,
-            total=len(upper_tri.columns),
-            desc="Dropping closely correlated vars...",
-            ncols=120,
-            leave=False,
-        )
-        if any(upper_tri[col] > threshold)
-    ]
-
-    # Reconstruct the DataFrame: keep non-numeric + surviving numeric columns
-    surviving_numeric = [c for c in numeric_df.columns if c not in cols_to_drop]
-
-    return surviving_numeric
-
-
-# ---------------------------------------------------------------------------
-# Bootstrap stability analysis
-# ---------------------------------------------------------------------------
-
-
 def bootstrap_stability(
     X: pd.DataFrame,
     tau: float,
@@ -178,18 +109,26 @@ def bootstrap_stability(
     """
     rng = np.random.default_rng(random_seed)
     n_samples = len(X)
+    val_test_samples = []
+    for i in range(n_samples):
+        for j in range(n_samples):
+            if i != j:
+                val_test_samples.append([i, j])
+
     all_features = X.columns.tolist()
 
     retained_matrix = pd.DataFrame(
-        0, index=all_features, columns=range(n_samples), dtype=np.int8
+        0, index=all_features, columns=range(len(val_test_samples)), dtype=np.int8
     )
     set_sizes = []
 
     for b in tqdm(
-        range(n_samples), desc="Bootstrap iteration", total=n_samples, ncols=120
+        range(len(val_test_samples)), desc="Bootstrap iteration", total=len(val_test_samples)
     ):
+        val_idx, test_idx = val_test_samples[b]
+
         # Draw resample indices with replacement
-        train_idx = [k for k in range(n_samples) if k != b]
+        train_idx = [k for k in range(n_samples) if (k != val_idx) and (k != test_idx)]
         X_boot = X.iloc[train_idx].reset_index(drop=True)
 
         vif_path = RESULTS_DIR / "VIF_Tables" / PREDICTION_TASK / f"{b}.csv"
@@ -197,9 +136,11 @@ def bootstrap_stability(
 
         kept = remove_correlated_features(X_boot, vif_path=vif_path, threshold=tau)
 
-        retained_matrix.loc[kept, b] = 1
+        retained_matrix.loc[kept.columns, b] = 1
         set_sizes.append(len(kept))
-
+        if b == 999:
+            break
+    
     retention_freq = retained_matrix.mean(axis=1).sort_values(ascending=False)
 
     return {
@@ -207,11 +148,6 @@ def bootstrap_stability(
         "set_sizes": set_sizes,
         "retained_matrix": retained_matrix,
     }
-
-
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
 
 
 def plot_stability_results(
@@ -329,12 +265,6 @@ def plot_stability_results(
     fig.suptitle("Bootstrap Stability Analysis — Feature Pruning", fontsize=14, y=1.01)
     return fig
 
-
-# ---------------------------------------------------------------------------
-# Convenience wrapper: run everything and save the figure
-# ---------------------------------------------------------------------------
-
-
 def run_stability_analysis(
     X: pd.DataFrame,
     tau: float,
@@ -381,23 +311,32 @@ def run_stability_analysis(
     )
 
     if save_path:
-        fig.savefig(save_path, bbox_inches="tight", dpi=150)
+        fig.savefig(save_path, bbox_inches="tight", dpi=600)
         print(f"\nFigure saved to {save_path}")
 
     return results, fig
 
-
+# %%
 # ---------------------------------------------------------------------------
 # Example usage
 # ---------------------------------------------------------------------------
+# X, _, _ = get_feats(
+#     prediction_task=PREDICTION_TASK,
+#     features_path=PYRAD_FILE,
+#     scaler=None,
+#     low_var_thresh=None,
+#     remove_correlated_feats=None
+# )
+# X.columns = translate_feat_names(X.columns)
 X, _, _ = load_feats()
 results, fig = run_stability_analysis(
     X=X,
     tau=CORRELATED_FEATS_THRESH,
     random_seed=42,
     stability_threshold=0.9,
-    top_n_features=40,
+    top_n_features=10,
     save_path=RESULTS_DIR
     / f"{PREDICTION_TASK}_tau{CORRELATED_FEATS_THRESH}_stability_analysis.png",
 )
 plt.show()
+plt.close()
